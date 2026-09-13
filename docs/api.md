@@ -22,6 +22,7 @@
 
 - `POST /api/import/url` — `{ "url": "https://shop.example/item" }` → `{ sourceUrl, fields, draft, warnings, duplicate }`。保存しない。
 - `POST /api/import/search` — `{ "name": "ウールコート", "brand": "AURALEE" }` → `{ query, candidates: [{ url, title, shop }] }`。OpenAIのweb検索で商品ページ候補を最大5件返す。URLは推測させず、検索結果に出たものだけを返し、取得可能なショップ（`searchDomains`）に限定する。保存しない。
+- `POST /api/classify` — `{ "name": "タートルネック ニット セーター", "brand": "classicalelf" }` → `{ category?, normalizedColor?, subCategory? }`。名前からカテゴリ・検索用カラーを推定する。許可値のenumで拘束し、判断できない項目は返さない。保存しない。
 - `POST /api/images` — JPEG/PNG/WebP binary、最大10MB → `{ image }`。
 - `GET /api/images/:id/{original|display|thumbnail}` — 所有者のみ。
 - `POST /api/images/:id/process` — multipartの `display` と `thumbnail`、または `status=processing|failed`。

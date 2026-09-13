@@ -29,43 +29,58 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     setState(() {});
   }
 
-  Future<void> addItem() async {
-    final mode = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (c) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final e in {
-              'url': 'URLから追加',
-              'photo': '写真から追加',
-              'manual': '手動で追加',
-            }.entries)
-              ListTile(
-                leading: Icon(
-                  e.key == 'url'
-                      ? Icons.link
-                      : e.key == 'photo'
-                      ? Icons.photo_camera_outlined
-                      : Icons.edit_outlined,
-                ),
-                title: Text(e.value),
-                onTap: () => Navigator.pop(c, e.key),
-              ),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
-    );
-    if (mode == null || !mounted) return;
-    final saved = await Navigator.push<bool>(
+  Future<void> addItem({String? mode}) async {
+    final selected =
+        mode ??
+        await showModalBottomSheet<String>(
+          context: context,
+          showDragHandle: true,
+          builder: (c) => SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final e in {
+                  'url': 'URLから追加',
+                  'photo': '写真から追加',
+                  'manual': '手動で追加',
+                }.entries)
+                  ListTile(
+                    leading: Icon(
+                      e.key == 'url'
+                          ? Icons.link
+                          : e.key == 'photo'
+                          ? Icons.photo_camera_outlined
+                          : Icons.edit_outlined,
+                    ),
+                    title: Text(e.value),
+                    onTap: () => Navigator.pop(c, e.key),
+                  ),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        );
+    if (selected == null || !mounted) return;
+    final saved = await Navigator.push<Object?>(
       context,
       MaterialPageRoute(
-        builder: (_) => EditorScreen(session: session, mode: mode),
+        builder: (_) => EditorScreen(session: session, mode: selected),
       ),
     );
-    if (saved == true && mounted) {
+    if (!mounted || saved == null) return;
+    if (saved == 'photo') {
+      // 撮影が続くときのために、その場で次を撮れるようにする。
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('登録しました'),
+          action: SnackBarAction(
+            label: '続けて撮る',
+            onPressed: () => addItem(mode: 'photo'),
+          ),
+        ),
+      );
+    }
+    if (saved == true) {
       search.clear();
       if (scroll.hasClients) scroll.jumpTo(0);
       setState(() => searching = false);

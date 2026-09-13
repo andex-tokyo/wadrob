@@ -134,3 +134,29 @@ export async function searchProducts(name:string,brand:string|undefined,env:Env,
  }
  return {query:[brand,name].filter(Boolean).join(' '),candidates};
 }
+
+// 商品名とブランドからカテゴリ・検索用カラーを推定する。
+// 手入力や写真登録でカテゴリを選ばせずに済ませるための補助。
+const classifySchema=z.object({category:looseEnum(categories),normalizedColor:looseEnum(colors),subCategory:z.string().nullable()}).strict();
+export async function classifyProduct(name:string,brand:string|undefined,env:Env,request:typeof fetch=fetch){
+ if(!env.OPENAI_API_KEY)throw new ApiError('AUTH_CONFIG','分類が設定されていません',503);
+ const properties={
+  category:{type:['string','null'],enum:[...categories,null]},
+  normalizedColor:{type:['string','null'],enum:[...colors,null]},
+  subCategory:{type:['string','null']},
+ };
+ const payload={
+  model:env.OPENAI_MODEL||'gpt-5.6-luna',store:false,reasoning:{effort:'none'},
+  instructions:'Choose the single best category and normalized color for this garment from the allowed values. Use null when the name does not make it clear. Do not invent facts.',
+  input:`商品名: ${name}\nブランド: ${brand||'不明'}`,
+  max_output_tokens:300,
+  text:{format:{type:'json_schema',name:'classification',strict:true,schema:{type:'object',properties,required:Object.keys(properties),additionalProperties:false}}},
+ };
+ const r=await request('https://api.openai.com/v1/responses',{method:'POST',signal:AbortSignal.timeout(15000),headers:{Authorization:`Bearer ${env.OPENAI_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify(payload)});
+ if(!r.ok)throw new ApiError('CLASSIFY_FAILED','分類できませんでした',502);
+ const result=await r.json() as any;
+ const output=result.output?.flatMap((x:any)=>x.content??[]).filter((x:any)=>x.type==='output_text').map((x:any)=>x.text).join('');
+ const parsed=classifySchema.safeParse(JSON.parse(output||'{}'));
+ if(!parsed.success)return {};
+ return {...(parsed.data.category?{category:parsed.data.category}:{}),...(parsed.data.normalizedColor?{normalizedColor:parsed.data.normalizedColor}:{}),...(parsed.data.subCategory?{subCategory:parsed.data.subCategory}:{})};
+}

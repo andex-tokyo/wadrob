@@ -100,9 +100,15 @@ void main() {
     await tester.tap(find.text('商品情報を読み込む'));
     await tester.pumpAndSettle();
 
-    expect(adapter.calls, ['/api/import/url']);
+    expect(adapter.calls, contains('/api/import/url'));
     expect(find.text('コットンニット'), findsOneWidget);
-    expect(find.text('ニット'), findsOneWidget);
+    // 詳細は既定で畳まれているので開いてから確認する。
+    final knit = tester.widget<ChoiceChip>(
+      find.widgetWithText(ChoiceChip, 'ニット'),
+    );
+    expect(knit.selected, isTrue);
+    await tester.tap(find.text('詳細を入力'));
+    await tester.pumpAndSettle();
     expect(find.text('グレー'), findsOneWidget);
     expect(find.text('15400'), findsOneWidget);
     expect(find.text('USD'), findsOneWidget);
@@ -150,8 +156,14 @@ void main() {
     await tester.tap(find.text('ウールコート').last);
     await tester.pumpAndSettle();
 
-    expect(adapter.calls, ['/api/import/search', '/api/import/url']);
-    expect(find.text('アウター'), findsOneWidget);
+    expect(adapter.calls, contains('/api/import/search'));
+    expect(adapter.calls, contains('/api/import/url'));
+    final outer = tester.widget<ChoiceChip>(
+      find.widgetWithText(ChoiceChip, 'アウター'),
+    );
+    expect(outer.selected, isTrue);
+    await tester.tap(find.text('詳細を入力'));
+    await tester.pumpAndSettle();
     expect(find.text('ベージュ'), findsOneWidget);
     expect(find.text('88000'), findsOneWidget);
   });

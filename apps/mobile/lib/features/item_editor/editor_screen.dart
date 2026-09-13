@@ -25,6 +25,7 @@ class EditorScreen extends StatefulWidget {
 class _EditorScreenState extends State<EditorScreen> {
   final formKey = GlobalKey<FormState>();
   final url = TextEditingController();
+  final nameFocus = FocusNode();
   final fields = <String, TextEditingController>{};
   final imageIds = <String>[];
   final imageUrls = <String>[];
@@ -64,12 +65,18 @@ class _EditorScreenState extends State<EditorScreen> {
       previews.add(image);
     }
     if (widget.mode == 'photo') {
+      // 2回目以降は前回使った方（カメラ/ライブラリ）をすぐ開く。
       WidgetsBinding.instance.addPostFrameCallback((_) => pickPhoto());
+    } else if (widget.mode == 'manual') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) nameFocus.requestFocus();
+      });
     }
   }
 
   @override
   void dispose() {
+    nameFocus.dispose();
     for (final c in fields.values) {
       c.dispose();
     }
@@ -139,6 +146,33 @@ class _EditorScreenState extends State<EditorScreen> {
     await loadFrom(value);
   }
 
+  /// 名前からカテゴリ・検索用カラーを推定し、未選択のときだけ埋める。
+  /// カテゴリは一覧の軸なので、選ばせずに埋まるに越したことはない。
+  Future<void> classify() async {
+    final name = fields['name']!.text.trim();
+    if (name.isEmpty || busy) return;
+    try {
+      final result = await widget.session.api.post('/api/classify', {
+        'name': name,
+        if (fields['brand']!.text.trim().isNotEmpty)
+          'brand': fields['brand']!.text.trim(),
+      });
+      if (!mounted) return;
+      setState(() {
+        final suggestedCategory = result['category']?.toString();
+        if (category == null && categories.containsKey(suggestedCategory)) {
+          category = suggestedCategory;
+        }
+        final suggestedColor = result['normalizedColor']?.toString();
+        if (color == null && colors.containsKey(suggestedColor)) {
+          color = suggestedColor;
+        }
+      });
+    } catch (_) {
+      // 分類できなくても登録はできる。
+    }
+  }
+
   Future<void> loadFrom(String value) async {
     try {
       final result = await widget.session.api.post('/api/import/url', {
@@ -186,8 +220,18 @@ class _EditorScreenState extends State<EditorScreen> {
         : (result['warnings'] as List? ?? []).join('\n');
   }
 
-  Future<void> pickPhoto() async {
-    final source = await showModalBottomSheet<ImageSource>(
+  /// [choose] が true のときは毎回カメラ/ライブラリを選ばせる。
+  Future<void> pickPhoto({bool choose = false}) async {
+    ImageSource? source;
+    if (!choose) {
+      final remembered = widget.session.prefs.getString('photoSource');
+      source = remembered == 'camera'
+          ? ImageSource.camera
+          : remembered == 'gallery'
+          ? ImageSource.gallery
+          : null;
+    }
+    source ??= await showModalBottomSheet<ImageSource>(
       context: context,
       showDragHandle: true,
       builder: (c) => SafeArea(
@@ -209,6 +253,10 @@ class _EditorScreenState extends State<EditorScreen> {
       ),
     );
     if (source == null) return;
+    await widget.session.prefs.setString(
+      'photoSource',
+      source == ImageSource.camera ? 'camera' : 'gallery',
+    );
     setState(() => busy = true);
     try {
       final file = await ImagePicker().pickImage(
@@ -224,6 +272,8 @@ class _EditorScreenState extends State<EditorScreen> {
       imageIds.add(image['id'] as String);
       previews.add(image);
       unawaited(ImageService(widget.session.api).process(image));
+      // 撮った直後に名前を入力できるようキーボードを出す。
+      if (mounted) nameFocus.requestFocus();
     } catch (e) {
       if (mounted) showError(context, e);
     } finally {
@@ -232,6 +282,10 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 
   Future<void> save() async {
+    // カテゴリ未選択なら保存前に一度だけ推定する。
+    if (category == null && fields['name']!.text.trim().isNotEmpty) {
+      await classify();
+    }
     if (!formKey.currentState!.validate()) return;
     setState(() => busy = true);
     try {
@@ -250,7 +304,10 @@ class _EditorScreenState extends State<EditorScreen> {
         data[key] = int.tryParse(fields[key]!.text.trim());
       }
       await widget.session.save(data, id: widget.item?.id);
-      if (mounted) Navigator.pop(context, true);
+      if (mounted) {
+        // 写真モードは「続けて撮る」ために呼び出し元へ知らせる。
+        Navigator.pop(context, widget.mode == 'photo' ? 'photo' : true);
+      }
     } catch (e) {
       if (mounted) showError(context, e);
     } finally {
@@ -258,38 +315,41 @@ class _EditorScreenState extends State<EditorScreen> {
     }
   }
 
-  Widget input(String key) => Padding(
-    padding: const EdgeInsets.only(bottom: 16),
-    child: TextFormField(
-      controller: fields[key],
-      maxLines: key == 'description' ? 3 : 1,
-      keyboardType: ['listPrice', 'purchasePrice'].contains(key)
-          ? TextInputType.number
-          : TextInputType.text,
-      decoration: InputDecoration(
-        labelText: labels[key],
-        helperText: key == 'purchasePrice'
-            ? '実際に支払った金額'
-            : key == 'listPrice'
-            ? 'URL取得価格は定価候補として入ります'
-            : null,
-      ),
-      validator: (v) {
-        if (key == 'name' && (v == null || v.trim().isEmpty)) {
-          return '商品名を入力してください';
-        }
-        if (['listPrice', 'purchasePrice'].contains(key) &&
-            v!.isNotEmpty &&
-            (int.tryParse(v) == null || int.parse(v) < 0)) {
-          return '0以上の整数で入力してください';
-        }
-        if (key == 'currency' && !RegExp(r'^[A-Z]{3}$').hasMatch(v ?? '')) {
-          return 'JPYなど3文字で入力してください';
-        }
-        return null;
-      },
-    ),
-  );
+  Widget input(String key, {FocusNode? focus, VoidCallback? onSubmitted}) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: TextFormField(
+          controller: fields[key],
+          focusNode: focus,
+          onFieldSubmitted: onSubmitted == null ? null : (_) => onSubmitted(),
+          maxLines: key == 'description' ? 3 : 1,
+          keyboardType: ['listPrice', 'purchasePrice'].contains(key)
+              ? TextInputType.number
+              : TextInputType.text,
+          decoration: InputDecoration(
+            labelText: labels[key],
+            helperText: key == 'purchasePrice'
+                ? '実際に支払った金額'
+                : key == 'listPrice'
+                ? 'URL取得価格は定価候補として入ります'
+                : null,
+          ),
+          validator: (v) {
+            if (key == 'name' && (v == null || v.trim().isEmpty)) {
+              return '商品名を入力してください';
+            }
+            if (['listPrice', 'purchasePrice'].contains(key) &&
+                v!.isNotEmpty &&
+                (int.tryParse(v) == null || int.parse(v) < 0)) {
+              return '0以上の整数で入力してください';
+            }
+            if (key == 'currency' && !RegExp(r'^[A-Z]{3}$').hasMatch(v ?? '')) {
+              return 'JPYなど3文字で入力してください';
+            }
+            return null;
+          },
+        ),
+      );
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -302,6 +362,10 @@ class _EditorScreenState extends State<EditorScreen> {
             : '服を追加',
         style: const TextStyle(fontSize: 17),
       ),
+      actions: [
+        if (widget.mode != 'url' || imported)
+          TextButton(onPressed: busy ? null : save, child: const Text('保存')),
+      ],
     ),
     body: Form(
       key: formKey,
@@ -370,11 +434,11 @@ class _EditorScreenState extends State<EditorScreen> {
               ),
             if (previews.length < 8)
               TextButton.icon(
-                onPressed: busy ? null : pickPhoto,
+                onPressed: busy ? null : () => pickPhoto(choose: true),
                 icon: const Icon(Icons.add_photo_alternate_outlined),
                 label: const Text('写真を追加'),
               ),
-            input('name'),
+            input('name', focus: nameFocus, onSubmitted: classify),
             input('brand'),
             if (widget.mode != 'url') ...[
               Align(
@@ -411,34 +475,40 @@ class _EditorScreenState extends State<EditorScreen> {
                 ),
               if (candidates.isNotEmpty) const SizedBox(height: 8),
             ],
-            DropdownButtonFormField<String>(
-              initialValue: category,
-              decoration: const InputDecoration(labelText: 'カテゴリ'),
-              items: [
-                const DropdownMenuItem(value: null, child: Text('未設定')),
-                ...categories.entries.map(
-                  (e) => DropdownMenuItem(value: e.key, child: Text(e.value)),
-                ),
-              ],
-              onChanged: (v) => category = v,
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'カテゴリ',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ),
+            const SizedBox(height: 6),
+            SizedBox(
+              height: 40,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  for (final entry in categories.entries)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: ChoiceChip(
+                        label: Text(
+                          entry.value,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        selected: category == entry.key,
+                        onSelected: (_) => setState(
+                          () => category = category == entry.key
+                              ? null
+                              : entry.key,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
-            input('originalColor'),
-            DropdownButtonFormField<String>(
-              initialValue: color,
-              decoration: const InputDecoration(labelText: '検索用カラー'),
-              items: [
-                const DropdownMenuItem(value: null, child: Text('未設定')),
-                ...colors.entries.map(
-                  (e) => DropdownMenuItem(value: e.key, child: Text(e.value)),
-                ),
-              ],
-              onChanged: (v) => color = v,
-            ),
-            const SizedBox(height: 16),
-            ...labels.keys
-                .where((k) => !['name', 'brand', 'originalColor'].contains(k))
-                .map(input),
+            _details(),
             const SizedBox(height: 20),
             FilledButton(
               onPressed: busy ? null : save,
@@ -447,6 +517,38 @@ class _EditorScreenState extends State<EditorScreen> {
           ],
         ],
       ),
+    ),
+  );
+
+  /// 詳細項目は既定で畳んでおき、写真と名前だけで保存できるようにする。
+  Widget _details() => Theme(
+    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+    child: ExpansionTile(
+      tilePadding: EdgeInsets.zero,
+      childrenPadding: const EdgeInsets.only(bottom: 8),
+      title: const Text('詳細を入力', style: TextStyle(fontSize: 13)),
+      subtitle: const Text(
+        'カテゴリ・カラー・価格など（任意）',
+        style: TextStyle(fontSize: 11, color: Colors.grey),
+      ),
+      children: [
+        input('originalColor'),
+        DropdownButtonFormField<String>(
+          initialValue: color,
+          decoration: const InputDecoration(labelText: '検索用カラー'),
+          items: [
+            const DropdownMenuItem(value: null, child: Text('未設定')),
+            ...colors.entries.map(
+              (e) => DropdownMenuItem(value: e.key, child: Text(e.value)),
+            ),
+          ],
+          onChanged: (v) => color = v,
+        ),
+        const SizedBox(height: 16),
+        ...labels.keys
+            .where((k) => !['name', 'brand', 'originalColor'].contains(k))
+            .map(input),
+      ],
     ),
   );
 }

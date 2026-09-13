@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { decodeJwt } from 'jose';
 import { issueSession, verifySession } from '../src/auth';
 import { BrowserFetcher, ChainFetcher, SimpleFetcher, validateUrl, zozoYahooMirror, type PageFetcher } from '../src/fetcher';
-import { GenericHtmlParser, GenericJsonLdParser, OpenGraphParser, aiExtract, decodeHtml, importUrl, mergeFields, searchProducts, tidyLabel } from '../src/import';
+import { GenericHtmlParser, GenericJsonLdParser, OpenGraphParser, aiExtract, classifyProduct, decodeHtml, importUrl, mergeFields, searchProducts, tidyLabel } from '../src/import';
 import { itemSchema, type Env } from '../src/model';
 
 describe('URL security', () => {
@@ -98,6 +98,23 @@ describe('product search', () => {
   });
   it('reports search failures', async () => {
     await expect(searchProducts('ニット',undefined,env(),async()=>new Response('nope',{status:429}))).rejects.toThrow();
+  });
+});
+
+/** classify のモック応答 */
+const classifyReply=(data:unknown)=>new Response(JSON.stringify({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify(data)}]}]}));
+
+describe('classification', () => {
+  it('returns the inferred category and color', async () => {
+    const result=await classifyProduct('タートルネック ニット セーター','classicalelf',env(),async()=>classifyReply({category:'knitwear',normalizedColor:'gray',subCategory:'タートルネック'}));
+    expect(result).toEqual({category:'knitwear',normalizedColor:'gray',subCategory:'タートルネック'});
+  });
+  it('drops an unknown category but keeps the color', async () => {
+    const result=await classifyProduct('謎の服',undefined,env(),async()=>classifyReply({category:'camisole',normalizedColor:'black',subCategory:null}));
+    expect(result).toEqual({normalizedColor:'black'});
+  });
+  it('reports failures', async () => {
+    await expect(classifyProduct('服',undefined,env(),async()=>new Response('nope',{status:500}))).rejects.toThrow();
   });
 });
 

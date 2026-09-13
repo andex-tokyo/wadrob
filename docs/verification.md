@@ -1,5 +1,22 @@
 # Verification record
 
+## Photo-first registration and category inference (2026-09-13)
+
+写真から20秒で登録できるようにするため、エディタを再構成した（Worker version `0f35f936-7e67-4a5b-ad2d-2e712048ac09`）。
+
+- 詳細項目を「詳細を入力」へ畳み、保存をAppBarにも置いた（スクロール不要）。写真選択直後に商品名へフォーカス、カメラ/ライブラリの選択を記憶、保存後は「続けて撮る」で連続登録
+- カテゴリは `POST /api/classify` で推定し、未選択のときだけ埋める。チップで1タップ修正できる
+- 実APIでの確認（`gpt-5.6-luna`・推論なし・約1.4〜1.8秒）:
+  - `レザースニーカー / adidas` → `shoes` + `sneakers`
+  - `メンズ コットンTシャツ` → `tops` + `Tシャツ`
+  - `フレアワンピース / SNIDEL` → **`all_in_one`**（後述のカテゴリ不足による）
+- Worker Vitest 35 tests（カテゴリ推定の正常系・想定外enumの破棄・失敗系を追加）、Flutter 7 tests（カテゴリチップの選択状態を検証）
+- 未確認: 実機での写真撮影〜保存の通し（エミュレータのメディア/カメラが不安定なため）
+
+### 見つけた論点: ワンピース・スカートのカテゴリが無い
+
+master-prompt §34 のカテゴリenumに「ワンピース」「スカート」が無いため、ワンピースは `all_in_one`（オールインワン）に寄せられた。実際には別物なので、enumに追加するか「その他」に倒すかを決める必要がある（§34の定義からの逸脱になるため保留）。
+
 ## Product search by name and brand (2026-09-13)
 
 写真・手動登録を楽にするため、商品名とブランドから商品ページ候補を探す `POST /api/import/search` を追加した（Worker version `5949c6b3-09f8-49bd-a928-3e36db7084ff`）。
