@@ -126,16 +126,31 @@ export function tidyLabel(value:unknown,siteName?:string):string|undefined{
  }
  return stripped||collapsed;
 }
-export async function importUrl(url:string,env:Env,fetcher:PageFetcher=new SimpleFetcher()){
+export async function importUrl(url:string,env:Env,fetcher:PageFetcher=new SimpleFetcher(),renderer?:PageFetcher){
  const sourceUrl=validateUrl(url).href;let fields:Fields={};const warnings:string[]=[];
  try{
-  const page=await fetcher.get(sourceUrl,'html');const html=decodeHtml(page.bytes,page.charset);
-  fields=mergeFields(new GenericJsonLdParser().parse(html),new OpenGraphParser().parse(html),new GenericHtmlParser().parse(html));
+  let page=await fetcher.get(sourceUrl,'html');
+  let html=decodeHtml(page.bytes,page.charset);
+  let parsed=mergeFields(new GenericJsonLdParser().parse(html),new OpenGraphParser().parse(html),new GenericHtmlParser().parse(html));
+  let pageImages=collectPageImages(html,page.url);
+  // JS描画のページやbot対策で内容が薄いときは、描画して取り直す。
+  if(renderer&&(parsed.name===undefined||pageImages.length<2)){
+   try{
+    const rendered=await renderer.get(page.url,'html');
+    const renderedHtml=decodeHtml(rendered.bytes,rendered.charset);
+    const renderedParsed=mergeFields(new GenericJsonLdParser().parse(renderedHtml),new OpenGraphParser().parse(renderedHtml),new GenericHtmlParser().parse(renderedHtml));
+    const renderedImages=collectPageImages(renderedHtml,rendered.url);
+    const score=(source:Fields,images:string[])=>(source.name?1:0)+(source.brand?1:0)+(source.listPrice?1:0)+Math.min(images.length,3);
+    if(score(renderedParsed,renderedImages)>score(parsed,pageImages)){
+     page=rendered;html=renderedHtml;parsed=renderedParsed;pageImages=renderedImages;
+    }
+   }catch(error){console.warn('render retry failed',reason(error));}
+  }
+  fields=parsed;
   // JSON-LD/OGPの画像を先頭に、ページ内の商品画像を足して選択肢を広げる。
-  const extraImages=collectPageImages(html,page.url);
-  if(extraImages.length){
+  if(pageImages.length){
    const existing=(fields.imageUrls?.value as string[]|undefined)??[];
-   const merged=[...existing,...extraImages].filter((url,index,all)=>all.indexOf(url)===index).slice(0,12);
+   const merged=[...existing,...pageImages].filter((url,index,all)=>all.indexOf(url)===index).slice(0,12);
    fields.imageUrls={value:merged,source:fields.imageUrls?.source??'html',confidence:fields.imageUrls?.confidence??.6};
   }
   if(env.OPENAI_API_KEY&&Object.keys(aiProperties).some(k=>fields[k]===undefined)){try{const {document}=parseHTML(html);document.querySelectorAll('script,style,nav,footer').forEach(x=>x.remove());fields=mergeFields(fields,await aiExtract(document.body?.textContent??'',env));}catch(error){console.warn('import ai failed',reason(error));warnings.push('補助解析を利用できませんでした');}}
@@ -157,7 +172,7 @@ export async function searchProducts(name:string,brand:string|undefined,env:Env,
  const payload={
   model:env.OPENAI_MODEL||'gpt-5.6-luna',store:false,reasoning:{effort:'none'},
   tools:[{type:'web_search',filters:{blocked_domains:searchBlockedDomains}}],tool_choice:'auto',
-  instructions:"Find product detail pages for the given garment. Include reused and second-hand marketplaces (Mercari, Yahoo! Auctions, 2nd STREET, ZOZO USED) and the brand's official store when the item is no longer sold new. Only return URLs that appear in the search results; never invent, complete or guess a URL.",
+  instructions:"Find product detail pages for the given garment. Include reused and second-hand marketplaces (Mercari, Yahoo! Auctions, 2nd STREET, ZOZO USED), the brand's official online store (e.g. store.world.co.jp), and item pages on fashion social services (e.g. wear.jp/item/...) when relevant. Only return URLs that appear in the search results; never invent, complete or guess a URL.",
   input:`商品名: ${name}\nブランド: ${brand||'不明'}\nこの商品の詳細ページを、新品・中古・公式を問わず最大8件探してください。`,
   max_output_tokens:2000,
   text:{format:{type:'json_schema',name:'candidates',strict:true,schema:{type:'object',properties:{candidates:{type:'array',items:{type:'object',properties:{url:{type:'string'},title:{type:['string','null']},shop:{type:['string','null']}},required:['url','title','shop'],additionalProperties:false}}},required:['candidates'],additionalProperties:false}}},

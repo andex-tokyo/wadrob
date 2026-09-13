@@ -69,6 +69,25 @@ describe('AI assisted import', () => {
 });
 
 describe('AI fallback triggering', () => {
+  it('renders again when the fetched page is thin', async () => {
+    const thin = '<html><head><title>読み込み中</title></head><body><div id="app"></div></body></html>';
+    const rich = `<html><head><meta property="og:title" content="ウールコート"><meta property="og:image" content="https://cdn.example/a.jpg"></head>
+      <body><script type="application/ld+json">{"@type":"Product","name":"ウールコート","brand":{"name":"AURALEE"},"image":["https://cdn.example/a.jpg","https://cdn.example/b.jpg","https://cdn.example/c.jpg"]}</script></body></html>`;
+    const first: PageFetcher = { get: async () => ({ bytes: new TextEncoder().encode(thin), url: 'https://shop.example/item', type: 'text/html' }) };
+    const rendered: PageFetcher = { get: async () => ({ bytes: new TextEncoder().encode(rich), url: 'https://shop.example/item', type: 'text/html' }) };
+    const result = await importUrl('https://shop.example/item', env({ OPENAI_API_KEY: undefined }), first, rendered);
+    expect(result.draft.name).toBe('ウールコート');
+    expect((result.draft.imageUrls as string[]).length).toBe(3);
+  });
+  it('keeps the fetched page when rendering is not better', async () => {
+    const rich = `<html><head><meta property="og:title" content="コットンニット"></head><body><img src="https://cdn.example/a_500.jpg"><img src="https://cdn.example/b_500.jpg"></body></html>`;
+    const worse = '<html><body>rendered but empty</body></html>';
+    const first: PageFetcher = { get: async () => ({ bytes: new TextEncoder().encode(rich), url: 'https://shop.example/item', type: 'text/html' }) };
+    const rendered: PageFetcher = { get: async () => ({ bytes: new TextEncoder().encode(worse), url: 'https://shop.example/item', type: 'text/html' }) };
+    const result = await importUrl('https://shop.example/item', env({ OPENAI_API_KEY: undefined }), first, rendered);
+    expect(result.draft.name).toBe('コットンニット');
+  });
+
   it('runs when a deterministic source leaves category or color empty', async () => {
     const calls=vi.fn(async()=>aiReply(aiProduct));
     vi.stubGlobal('fetch',calls);

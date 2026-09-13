@@ -14,6 +14,7 @@ import 'package:wadrob/features/item_editor/editor_screen.dart';
 class _StubAdapter implements HttpClientAdapter {
   _StubAdapter(this.responses);
   final Map<String, Map<String, dynamic>> responses;
+  Duration delay = Duration.zero;
   final calls = <String>[];
   final bodies = <Map<String, dynamic>>[];
   @override
@@ -25,6 +26,7 @@ class _StubAdapter implements HttpClientAdapter {
     Future<void>? cancelFuture,
   ) async {
     calls.add(options.path);
+    if (delay > Duration.zero) await Future<void>.delayed(delay);
     final data = options.data;
     if (data is Map) bodies.add(Map<String, dynamic>.from(data));
     return ResponseBody.fromString(
@@ -220,5 +222,39 @@ void main() {
       {'url': a},
       {'url': b},
     ]);
+  });
+
+  testWidgets('取得中は待機オーバーレイで何を待っているか伝える', (tester) async {
+    tester.view.physicalSize = const Size(1200, 3000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    SharedPreferences.setMockInitialValues({});
+    final adapter = _StubAdapter({
+      '/api/import/url': draftResponse({
+        'name': 'コットンニット',
+        'sourceUrl': 'https://shop.example/item',
+      }),
+    })..delay = const Duration(milliseconds: 500);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EditorScreen(session: await sessionWith(adapter), mode: 'url'),
+      ),
+    );
+    await tester.enterText(
+      find.byType(TextField).first,
+      'https://shop.example/item',
+    );
+    await tester.tap(find.text('商品情報を読み込む'));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    // 待っている間はオーバーレイが出て、何を待っているか分かる。
+    expect(find.byKey(const ValueKey('busy-overlay')), findsOneWidget);
+    expect(find.text('商品情報を取得中…'), findsWidgets);
+    expect(find.byType(CircularProgressIndicator), findsWidgets);
+
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('busy-overlay')), findsNothing);
+    expect(find.text('コットンニット'), findsOneWidget);
   });
 }

@@ -55,6 +55,9 @@ class _EditorScreenState extends State<EditorScreen> {
   List<Map<String, dynamic>> candidates = [];
   String? category, color, sleeve, message;
   bool busy = false, imported = false;
+
+  /// 待機中に出すメッセージ（何を待っているか伝える）。
+  String? busyLabel;
   static const labels = {
     'name': '商品名 *',
     'brand': 'ブランド',
@@ -117,6 +120,7 @@ class _EditorScreenState extends State<EditorScreen> {
     }
     setState(() {
       busy = true;
+      busyLabel = '商品情報を取得中…';
       message = null;
     });
     fields['sourceUrl']!.text = value;
@@ -133,6 +137,7 @@ class _EditorScreenState extends State<EditorScreen> {
     }
     setState(() {
       busy = true;
+      busyLabel = '候補を探しています…';
       message = null;
       candidates = [];
     });
@@ -163,6 +168,7 @@ class _EditorScreenState extends State<EditorScreen> {
     if (value.isEmpty) return;
     setState(() {
       busy = true;
+      busyLabel = '商品情報を取得中…';
       message = null;
     });
     fields['sourceUrl']!.text = value;
@@ -402,7 +408,10 @@ class _EditorScreenState extends State<EditorScreen> {
       'photoSource',
       source == ImageSource.camera ? 'camera' : 'gallery',
     );
-    setState(() => busy = true);
+    setState(() {
+      busy = true;
+      busyLabel = '写真を準備しています…';
+    });
     try {
       final file = await ImagePicker().pickImage(
         source: source,
@@ -432,7 +441,10 @@ class _EditorScreenState extends State<EditorScreen> {
       await classify();
     }
     if (!formKey.currentState!.validate()) return;
-    setState(() => busy = true);
+    setState(() {
+      busy = true;
+      busyLabel = '保存しています…';
+    });
     try {
       final data = <String, dynamic>{
         for (final e in fields.entries)
@@ -518,246 +530,276 @@ class _EditorScreenState extends State<EditorScreen> {
           TextButton(onPressed: busy ? null : save, child: const Text('保存')),
       ],
     ),
-    body: Form(
-      key: formKey,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-        children: [
-          if (widget.mode == 'url' && !imported) ...[
-            const Text(
-              '商品ページを、クローゼットへ。',
-              style: TextStyle(fontSize: 22, height: 1.6),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: url,
-              keyboardType: TextInputType.url,
-              decoration: InputDecoration(
-                hintText: 'https://…',
-                suffixIcon: IconButton(
-                  tooltip: '貼り付け',
-                  onPressed: () async {
-                    final d = await Clipboard.getData('text/plain');
-                    url.text = d?.text ?? '';
-                  },
-                  icon: const Icon(Icons.content_paste),
+    body: Stack(
+      children: [
+        Form(
+          key: formKey,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+            children: [
+              if (widget.mode == 'url' && !imported) ...[
+                const Text(
+                  '商品ページを、クローゼットへ。',
+                  style: TextStyle(fontSize: 22, height: 1.6),
                 ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: busy ? null : importUrl,
-              child: Text(busy ? '商品情報を取得中…' : '商品情報を読み込む'),
-            ),
-            TextButton(
-              onPressed: () => setState(() {
-                imported = true;
-                fields['sourceUrl']!.text = url.text.trim();
-              }),
-              child: const Text('手動で入力する'),
-            ),
-          ],
-          if (message?.isNotEmpty == true)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Text(
-                message!,
-                style: const TextStyle(color: Colors.brown),
-              ),
-            ),
-          if (widget.mode != 'url' || imported) ...[
-            if (previews.isNotEmpty)
-              SizedBox(
-                height: 270,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: previews.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: 12),
-                  itemBuilder: (_, n) => SizedBox(
-                    width: 210,
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: GestureDetector(
-                            onTap: n == 0
-                                ? null
-                                : () => setState(() {
+                const SizedBox(height: 12),
+                TextField(
+                  controller: url,
+                  keyboardType: TextInputType.url,
+                  decoration: InputDecoration(
+                    hintText: 'https://…',
+                    suffixIcon: IconButton(
+                      tooltip: '貼り付け',
+                      onPressed: () async {
+                        final d = await Clipboard.getData('text/plain');
+                        url.text = d?.text ?? '';
+                      },
+                      icon: const Icon(Icons.content_paste),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: busy ? null : importUrl,
+                  child: Text(busy ? '商品情報を取得中…' : '商品情報を読み込む'),
+                ),
+                TextButton(
+                  onPressed: () => setState(() {
+                    imported = true;
+                    fields['sourceUrl']!.text = url.text.trim();
+                  }),
+                  child: const Text('手動で入力する'),
+                ),
+              ],
+              if (message?.isNotEmpty == true)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Text(
+                    message!,
+                    style: const TextStyle(color: Colors.brown),
+                  ),
+                ),
+              if (widget.mode != 'url' || imported) ...[
+                if (previews.isNotEmpty)
+                  SizedBox(
+                    height: 270,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: previews.length,
+                      separatorBuilder: (_, _) => const SizedBox(width: 12),
+                      itemBuilder: (_, n) => SizedBox(
+                        width: 210,
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: GestureDetector(
+                                onTap: n == 0
+                                    ? null
+                                    : () => setState(() {
+                                        final picked = previews.removeAt(n);
+                                        previews.insert(0, picked);
+                                      }),
+                                child: ItemImage(
+                                  api: widget.session.api,
+                                  image: previews[n],
+                                  thumbnail: false,
+                                ),
+                              ),
+                            ),
+                            if (n == 0)
+                              const Positioned(
+                                left: 8,
+                                top: 8,
+                                child: _ImageBadge('メイン'),
+                              )
+                            else
+                              Positioned(
+                                left: 0,
+                                bottom: 0,
+                                child: TextButton(
+                                  onPressed: () => setState(() {
                                     final picked = previews.removeAt(n);
                                     previews.insert(0, picked);
                                   }),
-                            child: ItemImage(
-                              api: widget.session.api,
-                              image: previews[n],
-                              thumbnail: false,
-                            ),
-                          ),
-                        ),
-                        if (n == 0)
-                          const Positioned(
-                            left: 8,
-                            top: 8,
-                            child: _ImageBadge('メイン'),
-                          )
-                        else
-                          Positioned(
-                            left: 0,
-                            bottom: 0,
-                            child: TextButton(
-                              onPressed: () => setState(() {
-                                final picked = previews.removeAt(n);
-                                previews.insert(0, picked);
-                              }),
-                              child: const Text(
-                                'メインにする',
-                                style: TextStyle(fontSize: 11),
+                                  child: const Text(
+                                    'メインにする',
+                                    style: TextStyle(fontSize: 11),
+                                  ),
+                                ),
+                              ),
+                            Positioned(
+                              right: 0,
+                              top: 0,
+                              child: IconButton(
+                                tooltip: 'この画像を使わない',
+                                onPressed: () =>
+                                    setState(() => previews.removeAt(n)),
+                                icon: const Icon(Icons.close, size: 18),
                               ),
                             ),
-                          ),
-                        Positioned(
-                          right: 0,
-                          top: 0,
-                          child: IconButton(
-                            tooltip: 'この画像を使わない',
-                            onPressed: () =>
-                                setState(() => previews.removeAt(n)),
-                            icon: const Icon(Icons.close, size: 18),
-                          ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              ),
-            if (previews.length < 8)
-              TextButton.icon(
-                onPressed: busy ? null : () => pickPhoto(choose: true),
-                icon: const Icon(Icons.add_photo_alternate_outlined),
-                label: const Text('写真を追加'),
-              ),
-            if (imageCandidates.length > 1)
-              TextButton.icon(
-                onPressed: busy ? null : pickImages,
-                icon: const Icon(Icons.photo_library_outlined, size: 18),
-                label: Text('画像を選ぶ（${imageCandidates.length}枚から）'),
-              ),
-            if (previews.length > 1)
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'タップするとその画像をメイン（一覧の1枚目）にします。×で使わない画像を外せます。',
-                  style: TextStyle(fontSize: 11, color: Colors.grey),
-                ),
-              ),
-            input('name', focus: nameFocus, onSubmitted: classify),
-            input('brand'),
-            if (widget.mode != 'url') ...[
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: busy ? null : searchProducts,
-                  icon: const Icon(Icons.auto_awesome_outlined, size: 18),
-                  label: const Text('AIで商品を探す'),
-                ),
-              ),
-              const Text(
-                '商品名やブランドから候補を探し、選ぶと写真と情報を取り込みます。',
-                style: TextStyle(fontSize: 11, color: Colors.grey),
-              ),
-              for (final candidate in candidates)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  title: Text(
-                    candidate['title']?.toString() ??
-                        candidate['url'].toString(),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 13),
+                if (previews.length < 8)
+                  TextButton.icon(
+                    onPressed: busy ? null : () => pickPhoto(choose: true),
+                    icon: const Icon(Icons.add_photo_alternate_outlined),
+                    label: const Text('写真を追加'),
                   ),
-                  subtitle: Text(
-                    candidate['shop']?.toString() ??
-                        Uri.tryParse(candidate['url'].toString())?.host ??
-                        '',
-                    style: const TextStyle(fontSize: 11),
+                if (imageCandidates.length > 1)
+                  TextButton.icon(
+                    onPressed: busy ? null : pickImages,
+                    icon: const Icon(Icons.photo_library_outlined, size: 18),
+                    label: Text('画像を選ぶ（${imageCandidates.length}枚から）'),
                   ),
-                  trailing: const Icon(Icons.add, size: 18),
-                  onTap: busy ? null : () => importCandidate(candidate),
+                if (previews.length > 1)
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'タップするとその画像をメイン（一覧の1枚目）にします。×で使わない画像を外せます。',
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                  ),
+                input('name', focus: nameFocus, onSubmitted: classify),
+                input('brand'),
+                if (widget.mode != 'url') ...[
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: busy ? null : searchProducts,
+                      icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+                      label: const Text('AIで商品を探す'),
+                    ),
+                  ),
+                  const Text(
+                    '商品名やブランドから候補を探し、選ぶと写真と情報を取り込みます。',
+                    style: TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                  for (final candidate in candidates)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      title: Text(
+                        candidate['title']?.toString() ??
+                            candidate['url'].toString(),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                      subtitle: Text(
+                        candidate['shop']?.toString() ??
+                            Uri.tryParse(candidate['url'].toString())?.host ??
+                            '',
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      trailing: const Icon(Icons.add, size: 18),
+                      onTap: busy ? null : () => importCandidate(candidate),
+                    ),
+                  if (candidates.isNotEmpty) const SizedBox(height: 8),
+                ],
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'カテゴリ',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
                 ),
-              if (candidates.isNotEmpty) const SizedBox(height: 8),
+                const SizedBox(height: 6),
+                SizedBox(
+                  height: 40,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    children: [
+                      for (final entry in categories.entries)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: ChoiceChip(
+                            label: Text(
+                              entry.value,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            selected: category == entry.key,
+                            onSelected: (_) => setState(
+                              () => category = category == entry.key
+                                  ? null
+                                  : entry.key,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '袖丈',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                SizedBox(
+                  height: 40,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    children: [
+                      for (final entry in sleeves.entries)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: ChoiceChip(
+                            label: Text(
+                              entry.value,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            selected: sleeve == entry.key,
+                            onSelected: (_) => setState(
+                              () => sleeve = sleeve == entry.key
+                                  ? null
+                                  : entry.key,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _details(),
+                const SizedBox(height: 20),
+                FilledButton(
+                  onPressed: busy ? null : save,
+                  child: Text(busy ? '保存中…' : 'クローゼットに保存'),
+                ),
+              ],
             ],
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'カテゴリ',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-            ),
-            const SizedBox(height: 6),
-            SizedBox(
-              height: 40,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: [
-                  for (final entry in categories.entries)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: ChoiceChip(
-                        label: Text(
-                          entry.value,
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        selected: category == entry.key,
-                        onSelected: (_) => setState(
-                          () => category = category == entry.key
-                              ? null
-                              : entry.key,
-                        ),
-                      ),
+          ),
+        ),
+        if (busy)
+          Positioned.fill(
+            key: const ValueKey('busy-overlay'),
+            child: ColoredBox(
+              color: Colors.white.withValues(alpha: .75),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: CircularProgressIndicator(strokeWidth: 2.5),
                     ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                '袖丈',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-            ),
-            const SizedBox(height: 6),
-            SizedBox(
-              height: 40,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: [
-                  for (final entry in sleeves.entries)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: ChoiceChip(
-                        label: Text(
-                          entry.value,
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        selected: sleeve == entry.key,
-                        onSelected: (_) => setState(
-                          () => sleeve = sleeve == entry.key ? null : entry.key,
-                        ),
-                      ),
+                    const SizedBox(height: 16),
+                    Text(
+                      busyLabel ?? '処理中…',
+                      style: const TextStyle(fontSize: 13),
                     ),
-                ],
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 16),
-            _details(),
-            const SizedBox(height: 20),
-            FilledButton(
-              onPressed: busy ? null : save,
-              child: Text(busy ? '保存中…' : 'クローゼットに保存'),
-            ),
-          ],
-        ],
-      ),
+          ),
+      ],
     ),
   );
 

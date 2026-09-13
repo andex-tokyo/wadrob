@@ -1,5 +1,13 @@
 # Verification record
 
+## Waiting feedback, WEAR/WORLD, render retry (2026-09-13)
+
+- 待機表示: エディタの処理中はオーバーレイで理由を出す（商品情報を取得中… / 候補を探しています… / 写真を準備しています… / 保存しています…）。処理中は保存を無効化
+- WEAR（wear.jp）: 実ページで取得可能。商品ページはJSON-LD Productと`og:image`を持ち、画像CDN（images.wear2.jp / c.imgz.jp）も取得できる。コーデページは商品のProduct JSON-LDとコーデ写真を持つ。UIバナーは `/banner/` 除外で混入しない
+- WORLD公式EC（store.world.co.jp）: `Wadrob/1.0`でもブラウザ相当のUAでも403（bot対策）。決定的解析とBrowser Runの描画で取り直す経路を追加したが、取得可否は実機で要確認。代替として各ブランドの商品は楽天・Yahoo!ショッピング・ZOZO・WEAR経由でも拾える
+- 内容が薄いページの取り直し: 決定的解析のスコア（名前・ブランド・価格・画像枚数）で、Browser Run描画のほうが良ければ差し替える。Worker Vitestで「薄い→描画で改善」「描画が悪ければ元のまま」を検証
+- AI検索の指示に、ブランド公式ECとWEARの商品ページを候補に含めることを明記
+
 ## Gallery images and picker modal (2026-09-13)
 
 「Yahoo!ショッピングで1枚しか取れない」事象を修正し、画像はモーダルで選ぶ形にした（Worker version `dea2ff2d-3e7b-49aa-8021-03d338ed2112`）。
