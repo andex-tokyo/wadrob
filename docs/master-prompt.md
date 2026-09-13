@@ -33,15 +33,21 @@ PoC、画面モック、サンプルコードではなく、
 
 正式名称:
 
-ワドロブ
+ワドロブ（読み）
 
 
 英字表記:
 
-WADROB
+WDRB
 
 
 WARDROBEをベースにした造語。
+
+
+2026-09-13 改訂:
+アプリの表示名は WDRB（旧 WADROB）。
+リポジトリ名・Worker・D1/R2・Android applicationId は
+Google OAuth の登録に紐づくため wadrob のままとする。
 
 
 推奨内部名:
@@ -310,6 +316,23 @@ image_picker
 google_sign_in
 
 
+2026-09-13 実装:
+
+Riverpod（依存注入のみ）
+Dio
+Drift（ローカルcache）
+flutter_secure_storage
+cached_network_image
+image_picker
+google_sign_in
+shared_preferences（表示設定）
+image / image_background_remover（端末内の画像処理）
+
+go_router / freezed / json_serializable は
+規模に対して過剰なため採用していない（ADR-004）。
+画面遷移は Navigator、modelは手書き。
+
+
 Backend:
 
 Cloudflare Workers
@@ -325,6 +348,13 @@ Wrangler
 
 Cloudflare Queues
 Cloudflare Browser Rendering
+
+
+2026-09-13 実装:
+
+Cloudflare Browser Run（旧 Browser Rendering）を採用。
+bot対策で取得できないページの描画に使い、
+ZOZOTOWNは同一商品の Yahoo!店ミラーを優先する。
 
 
 AI:
@@ -1971,6 +2001,8 @@ originalColor
 
 normalizedColor
 
+sleeve
+
 listPrice
 
 currency
@@ -2001,6 +2033,26 @@ metadata
 
 URL文字列だけをOpenAIへ渡して
 商品情報取得を丸投げしない。
+
+
+2026-09-13 改訂:
+
+推定対象に sleeve（袖丈）を追加。
+
+加えて、写真や手動で登録するときの補助として
+
+POST /api/import/search
+
+を持つ。これは商品名とブランドから
+**商品ページの候補URL**を得るだけで、
+商品情報の抽出は必ず既存のURL取込
+（決定的解析 → 必要時のみAI）を通す。
+URLは推測させず検索結果に出たものだけを返し、
+取得できることを確認済みのショップに限定する。
+
+同じく POST /api/classify は
+名前からカテゴリ・検索用カラー・袖丈を推定する。
+どちらも保存はしない。
 
 
 ==================================================
@@ -2208,6 +2260,16 @@ JavaScript rendering必須サイトへ
 Cloudflare Browser Renderingを使用。
 
 
+2026-09-13 実装:
+
+取得順は SimpleFetcher → （ZOZOTOWNのみ）Yahoo!店ミラー
+→ BrowserFetcher（Browser Run）。
+Browser Runが403のブロックページを返した場合は
+成功として扱わず取得失敗にする。
+商品ページは EUC-JP / Shift_JIS があり得るため
+charset判定を通す。
+
+
 ==================================================
 58. PRODUCT PARSER
 ==================================================
@@ -2302,6 +2364,27 @@ Color selector
 など通常UIを使う。
 
 
+2026-09-13 実装:
+
+写真から20秒で登録できることを目標に、
+エディタは「写真・商品名・カテゴリ・袖丈・保存」だけを見せ、
+詳細（カラー表記・サイズ・価格・購入日・型番・SKU・購入店・メモ）は
+折りたたむ。保存はAppBarにも置き、
+スクロールしないと保存できない状態を避ける。
+撮影直後に商品名へフォーカスし、
+カメラ/ライブラリの選択は記憶する。
+保存後は「続けて撮る」で次の1枚に進める。
+
+カテゴリと袖丈は選ばせない。
+名前から POST /api/classify が推定して埋め、
+誤りはチップを1タップで直せる（未選択のまま保存も可能）。
+
+OpenAI Visionで服情報を推測しない方針は維持。
+代わりに、商品名とブランドから
+POST /api/import/search で商品ページを探し、
+公式の写真・価格を取り込めるようにした。
+
+
 ==================================================
 60. MANUAL IMPORT
 ==================================================
@@ -2386,6 +2469,10 @@ Import:
 
 POST /api/import/url
 
+POST /api/import/search
+
+POST /api/classify
+
 
 Images:
 
@@ -2393,6 +2480,8 @@ Images:
 POST /api/images
 
 POST /api/images/:id/process
+
+GET /api/images/:id/{original|display|thumbnail}
 
 
 Metadata:
@@ -2487,6 +2576,16 @@ workers/api/migrations/
 
 
 連番管理。
+
+
+2026-09-13 実装:
+
+0001_initial.sql   初期schemaとカテゴリseed
+0002_category_tuning.sql  カテゴリ調整（スーツ追加・未使用削除）
+0003_sleeve.sql  袖丈の列と索引
+
+wardrobe_items には sleeve（任意）を追加。
+item_images は user_id を持ち、所有権を画像行でも検証する。
 
 
 ==================================================
@@ -2831,6 +2930,29 @@ lib/
     settings/
 
 
+2026-09-13 実装:
+
+lib/
+
+  main.dart（theme / 起動 / login画面）
+
+  core/
+    api.dart        通信
+    session.dart    認証状態・同期・保存
+    cache.dart      Driftのローカルcache
+    models.dart     item model / 検索・filter・並び替え / 表記ゆれの名寄せ
+    images.dart     画像処理（正規化・背景除去）と画像API
+    widgets.dart    共通widget（画像canvas・エラー表示・確認dialog）
+
+  features/
+    wardrobe/       クローゼット（grid・検索・filter・追加の入口）
+    item_detail/    詳細
+    item_editor/    URL取込・写真・手動の共通エディタ
+
+認証・URL取込・写真登録は独立ディレクトリに分けず、
+session.dart と item_editor に集約している。
+
+
 ==================================================
 78. OPENAI BOUNDARY
 ==================================================
@@ -3051,6 +3173,30 @@ Photo Import
 Archived Filter
 
 Image fallback
+
+
+2026-09-13 実装:
+
+検証手段を3層に分けた（docs/status.md）。
+
+ロジック（検索・filter・並び替え・cache・エディタ反映）
+  → Flutter unit/widget test
+API（URL取込・CRUD・archive・画像ステート）
+  → Worker Vitest
+OS・ネイティブ（背景除去・画像正規化・写真/カメラ・Googleサインイン）
+  → 端末スモーク（integration_test）
+
+コマンド:
+
+./scripts/check.sh          worker typecheck/lint/test + flutter format/analyze/test
+./scripts/check-release-apk.sh  release APKのJNIクラス検査（R8対策）
+./scripts/smoke-device.sh [id]  端末のONNX・正規化スモーク
+
+push時は GitHub Actions が worker と app を並列に回し、
+release APK検査はAndroid・依存が変わったときだけ実行する。
+
+release限定の不具合（R8がJNI参照クラスを削除）は
+静的APK検査で検出する（flutter driveはrelease非対応のため）。
 
 
 ==================================================
@@ -3286,6 +3432,10 @@ UIを再調整してから完成とする。
 ==================================================
 89. DEFINITION OF DONE
 ==================================================
+
+2026-09-13 追記:
+各フローの「今どこまで終わったか」は docs/status.md を唯一の台帳とする。
+実機・本番で確認できるまで ✅ にしない。
 
 FLOW A — Authentication
 
@@ -3769,3 +3919,30 @@ UI磨き込み
 まで進め、
 
 Androidで日常利用可能なMVPを完成させてください。
+
+
+==================================================
+改訂履歴
+==================================================
+
+この文書は要件定義であり、実装の進み方に合わせて改訂する。
+現在地と残タスクは docs/status.md、判断の理由は docs/decisions.md にある。
+
+2026-09-13
+
+- アプリの表示名を WDRB に変更（リポジトリ名等は wadrob のまま）
+- アイコンとスプラッシュを白地・黒文字のワードマークで整備
+  （書体はログイン画面と同じ Roboto。tool/generate_brand_assets.py で再生成）
+- カテゴリを実際に着る物へ調整
+  アウター / トップス / シャツ / ニット / パンツ / スーツ / シューズ / アクセサリー / その他
+  （デニム・セットアップ・バッグ・オールインワンを削除、スーツを追加。ADR-005）
+- 袖丈を属性として追加（半袖 / 長袖 / ノースリーブ / 七分袖）
+- サイズとブランドの表記ゆれを名寄せしてfilterを1件にまとめる
+- URL取込の取得経路を SimpleFetcher → ZOZOTOWNミラー → Browser Run の3段に
+- 商品名とブランドから商品ページ候補を探す POST /api/import/search を追加
+- 名前からカテゴリ・カラー・袖丈を推定する POST /api/classify を追加
+- AIモデルは gpt-5.6-luna（OPENAI_MODEL で変更可）
+- エディタを写真・商品名・カテゴリ・袖丈・保存に絞り、詳細は折りたたむ
+- 検証を3層（ロジック / API / OS・ネイティブ）に分け、
+  scripts/check.sh・check-release-apk.sh・smoke-device.sh と GitHub Actions を用意
+- docs/status.md を進捗の唯一の台帳として追加
