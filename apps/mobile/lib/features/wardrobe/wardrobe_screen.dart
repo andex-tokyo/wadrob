@@ -114,14 +114,13 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
         builder: (c, update) {
           // 表記ゆれを1件にまとめる。表示名は最初に見つかったものを使う。
           final brands = <String, String>{};
+          final sizes = <String, String>{};
           for (final i in session.items) {
             final name = i.text('brand');
             if (name.isNotEmpty) brands.putIfAbsent(brandKey(name), () => name);
+            final size = i.text('size');
+            if (size.isNotEmpty) sizes.putIfAbsent(sizeKey(size), () => size);
           }
-          final sizes = {
-            for (final i in session.items)
-              if (i.text('size').isNotEmpty) i.text('size'): i.text('size'),
-          };
           void set(void Function() fn) {
             update(fn);
             changed();
@@ -165,8 +164,14 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                       (v) => set(() => session.browse.color = v),
                     ),
                     select(
+                      '袖丈',
+                      session.browse.sleeve,
+                      sleeves,
+                      (v) => set(() => session.browse.sleeve = v),
+                    ),
+                    select(
                       'サイズ',
-                      session.browse.size,
+                      sizeKey(session.browse.size),
                       sizes,
                       (v) => set(() => session.browse.size = v),
                     ),

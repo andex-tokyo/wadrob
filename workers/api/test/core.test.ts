@@ -3,7 +3,7 @@ import { decodeJwt } from 'jose';
 import { issueSession, verifySession } from '../src/auth';
 import { BrowserFetcher, ChainFetcher, SimpleFetcher, validateUrl, zozoYahooMirror, type PageFetcher } from '../src/fetcher';
 import { GenericHtmlParser, GenericJsonLdParser, OpenGraphParser, aiExtract, classifyProduct, decodeHtml, importUrl, mergeFields, searchProducts, tidyLabel } from '../src/import';
-import { categories, itemSchema, type Env } from '../src/model';
+import { categories, itemSchema, sleeves, type Env } from '../src/model';
 
 describe('URL security', () => {
   it.each(['file:///etc/passwd','http://localhost/x','http://127.0.0.1/x','http://169.254.169.254/latest','ftp://example.com/x'])('rejects %s', (url) => expect(() => validateUrl(url)).toThrow());
@@ -26,10 +26,15 @@ describe('items', () => {
     expect(itemSchema.parse({name:'スーツ',category:'suits'}).category).toBe('suits');
     expect(() => itemSchema.parse({name:'デニム',category:'denim'})).toThrow();
   });
+  it('accepts a sleeve length and nothing else', () => {
+    expect(sleeves).toEqual(['short','long','sleeveless','three_quarter']);
+    expect(itemSchema.parse({name:'Tシャツ',sleeve:'short'}).sleeve).toBe('short');
+    expect(() => itemSchema.parse({name:'Tシャツ',sleeve:'puff'})).toThrow();
+  });
 });
 
 const aiReply=(product:Record<string,unknown>)=>new Response(JSON.stringify({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify(product)}]}]}));
-const aiProduct={name:null,brand:null,category:'knitwear',subCategory:null,originalColor:null,normalizedColor:'gray',listPrice:null,currency:null,productCode:null,shopName:null};
+const aiProduct={name:null,brand:null,category:'knitwear',subCategory:null,originalColor:null,normalizedColor:'gray',sleeve:null,listPrice:null,currency:null,productCode:null,shopName:null};
 const env=(extra:Partial<Env>={})=>({OPENAI_API_KEY:'test-key',OPENAI_MODEL:'gpt-5.6-luna',...extra}) as Env;
 const htmlFetcher=(html:string):PageFetcher=>({get:async()=>({bytes:new TextEncoder().encode(html),url:'https://shop.example/item',type:'text/html'})});
 const jsonLd=`<script type="application/ld+json">{"@type":"Product","name":"コットンニット","brand":{"name":"AURALEE"},"offers":{"price":"15400","priceCurrency":"JPY"}}</script>`;
@@ -112,11 +117,11 @@ const classifyReply=(data:unknown)=>new Response(JSON.stringify({status:'complet
 
 describe('classification', () => {
   it('returns the inferred category and color', async () => {
-    const result=await classifyProduct('タートルネック ニット セーター','classicalelf',env(),async()=>classifyReply({category:'knitwear',normalizedColor:'gray',subCategory:'タートルネック'}));
-    expect(result).toEqual({category:'knitwear',normalizedColor:'gray',subCategory:'タートルネック'});
+    const result=await classifyProduct('タートルネック ニット セーター','classicalelf',env(),async()=>classifyReply({category:'knitwear',normalizedColor:'gray',sleeve:'long',subCategory:'タートルネック'}));
+    expect(result).toEqual({category:'knitwear',normalizedColor:'gray',sleeve:'long',subCategory:'タートルネック'});
   });
   it('drops an unknown category but keeps the color', async () => {
-    const result=await classifyProduct('謎の服',undefined,env(),async()=>classifyReply({category:'camisole',normalizedColor:'black',subCategory:null}));
+    const result=await classifyProduct('謎の服',undefined,env(),async()=>classifyReply({category:'camisole',normalizedColor:'black',sleeve:'puff',subCategory:null}));
     expect(result).toEqual({normalizedColor:'black'});
   });
   it('reports failures', async () => {

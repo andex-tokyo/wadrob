@@ -1,5 +1,16 @@
 # Verification record
 
+## Sleeve attribute and size normalisation (2026-09-13)
+
+- `wardrobe_items.sleeve` を追加（migration `0003_sleeve.sql`、ローカル・本番D1へ適用済み、`user_id/sleeve` に索引）
+- 値は 半袖 / 長袖 / ノースリーブ / 七分袖。カテゴリとは別軸の属性として扱う
+- エディタ: カテゴリの隣に袖丈チップ（可視）。名前からの推定（`POST /api/classify`）で未選択のときだけ埋める。URL取込の解析結果にも含まれる
+- フィルタ: ブランド / カラー / 袖丈 / サイズ / 手放した服
+- サイズ正規化: `M` / `Ｍ` / `Mサイズ` / `メンズM` / `38cm` を比較キーで名寄せ（ブランドと同じ方式）。表示は元の表記を残す
+- 検索: 「半袖」など日本語ラベルでも引けるよう、検索対象に袖丈のラベルを追加
+- Worker Vitest 37 tests（袖丈の値域・classificationへの追加）、Flutter 10 tests（サイズ名寄せ・袖丈フィルタ・日本語検索）
+- master-prompt を改訂（カテゴリ一覧、袖丈、フィルタ、groupIdの説明、アプリ表示名）
+
 ## Category tuning (2026-09-13)
 
 オーナーの利用に合わせてカテゴリを調整した（migration `0002_category_tuning.sql`、Worker version `1b01ae0c-7914-4401-9ee6-90ddee624ee2`）。

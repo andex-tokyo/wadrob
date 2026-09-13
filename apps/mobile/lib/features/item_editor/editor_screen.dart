@@ -31,7 +31,7 @@ class _EditorScreenState extends State<EditorScreen> {
   final imageUrls = <String>[];
   final previews = <Map<String, dynamic>>[];
   List<Map<String, dynamic>> candidates = [];
-  String? category, color, message;
+  String? category, color, sleeve, message;
   bool busy = false, imported = false;
   static const labels = {
     'name': '商品名 *',
@@ -60,6 +60,7 @@ class _EditorScreenState extends State<EditorScreen> {
     }
     category = widget.item?.data['category'] as String?;
     color = widget.item?.data['normalizedColor'] as String?;
+    sleeve = widget.item?.data['sleeve'] as String?;
     for (final image in widget.item?.images ?? <Map<String, dynamic>>[]) {
       imageIds.add(image['id'] as String);
       previews.add(image);
@@ -167,6 +168,10 @@ class _EditorScreenState extends State<EditorScreen> {
         if (color == null && colors.containsKey(suggestedColor)) {
           color = suggestedColor;
         }
+        final suggestedSleeve = result['sleeve']?.toString();
+        if (sleeve == null && sleeves.containsKey(suggestedSleeve)) {
+          sleeve = suggestedSleeve;
+        }
       });
     } catch (_) {
       // 分類できなくても登録はできる。
@@ -212,6 +217,10 @@ class _EditorScreenState extends State<EditorScreen> {
     final importedColor = draft['normalizedColor']?.toString();
     if (color == null && colors.containsKey(importedColor)) {
       color = importedColor;
+    }
+    final importedSleeve = draft['sleeve']?.toString();
+    if (sleeve == null && sleeves.containsKey(importedSleeve)) {
+      sleeve = importedSleeve;
     }
     imageUrls.addAll((draft['imageUrls'] as List? ?? []).cast<String>());
     previews.addAll(imageUrls.map((u) => {'originalUrl': u}));
@@ -296,6 +305,7 @@ class _EditorScreenState extends State<EditorScreen> {
         'currency': fields['currency']!.text.trim().toUpperCase(),
         'category': category,
         'normalizedColor': color,
+        'sleeve': sleeve,
         'status': widget.item?.text('status') ?? 'active',
         'imageIds': imageIds,
         'imageUrls': imageUrls,
@@ -501,6 +511,37 @@ class _EditorScreenState extends State<EditorScreen> {
                           () => category = category == entry.key
                               ? null
                               : entry.key,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '袖丈',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ),
+            const SizedBox(height: 6),
+            SizedBox(
+              height: 40,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  for (final entry in sleeves.entries)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: ChoiceChip(
+                        label: Text(
+                          entry.value,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        selected: sleeve == entry.key,
+                        onSelected: (_) => setState(
+                          () => sleeve = sleeve == entry.key ? null : entry.key,
                         ),
                       ),
                     ),

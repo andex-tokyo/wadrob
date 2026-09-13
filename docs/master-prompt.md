@@ -2,6 +2,12 @@
 # Personal Digital Wardrobe
 # Master Build Prompt
 
+> 2026-09-13 改訂
+> - アプリの表示名は **WDRB**（旧 WADROB）。リポジトリ名・Worker・applicationId は `wadrob` のまま
+> - カテゴリをオーナーの実際の利用に合わせて調整（**スーツ追加 / デニム・セットアップ・バッグ・オールインワンを削除**）
+> - **袖丈**を属性として追加（半袖 / 長袖 / ノースリーブ / 七分袖）
+> - 経緯と判断は [decisions.md](decisions.md) の ADR-005 と [status.md](status.md) を参照
+
 あなたは、このプロジェクトを設計・実装・テスト・UX仕上げまで担当する
 シニアFlutterエンジニア兼Cloudflareアーキテクトです。
 
@@ -1224,6 +1230,8 @@ originalColor
 
 normalizedColor
 
+sleeve
+
 size
 
 listPrice
@@ -1373,11 +1381,8 @@ tops
 shirts
 knitwear
 pants
-denim
-setup
-all_in_one
+suits
 shoes
-bags
 accessories
 other
 
@@ -1390,11 +1395,8 @@ Japanese UI:
 シャツ
 ニット
 パンツ
-デニム
-セットアップ
-オールインワン
+スーツ
 シューズ
-バッグ
 アクセサリー
 その他
 
@@ -1402,11 +1404,19 @@ Japanese UI:
 将来的に追加しやすい構造。
 
 
+2026-09-13 改訂:
+オーナーの実際の利用に合わせて、
+デニム・セットアップ・バッグ・オールインワンを削除し、
+スーツを追加した。
+ワンピース・スカートは追加しない。
+理由と経緯は docs/decisions.md の ADR-005 を参照。
+
+
 ==================================================
 35. SETUP / GROUP
 ==================================================
 
-セットアップは、
+スーツやセットアップは、
 
 ジャケット
 パンツ
@@ -1417,7 +1427,10 @@ Japanese UI:
 groupIdで関連付け可能。
 
 
-オールインワンは1 Item。
+2026-09-13 改訂:
+セットアップ／オールインワンのカテゴリは削除したが、
+上下を別ItemとしてgroupIdで紐付ける仕組みは
+スーツのために残す。
 
 
 ==================================================
@@ -1491,9 +1504,9 @@ Grid上部に軽量な横スクロール。
 
 パンツ
 
-シューズ
+スーツ
 
-バッグ
+シューズ
 
 アクセサリー
 
@@ -1554,6 +1567,7 @@ Filter:
 brand
 category
 color
+sleeve
 size
 status
 

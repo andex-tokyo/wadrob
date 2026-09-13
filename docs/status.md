@@ -16,7 +16,7 @@
 | 項目 | 値 |
 | --- | --- |
 | API | `https://wadrob-api.tsuchida.workers.dev` |
-| Worker | `wadrob-api` 最新 version `1b01ae0c-7914-4401-9ee6-90ddee624ee2`（2026-09-13、カテゴリ調整を適用） |
+| Worker | `wadrob-api` 最新 version `f90b0b74-1e3b-4b59-9651-b15702ab0390`（2026-09-13、袖丈を追加） |
 | D1 / R2 | `wadrob-db` / `wadrob-images`（Browser Run binding `BROWSER` あり） |
 | AI | `gpt-5.6-luna`（`OPENAI_API_KEY` 登録済み、`reasoning.effort: none`） |
 | 端末 | Pixel 6a エミュレータ（Android 36.1）、release APK インストール済み・Googleログイン済み |
@@ -77,6 +77,7 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 
 - ブランド: 表示名 WDRB。白地に黒文字のワードマークで、アイコン（アダプティブ含む）とスプラッシュをログイン画面と同じ Roboto に統一。`tool/generate_brand_assets.py` で再生成できる
 - 登録の入口: URL取込に加えて、**商品名とブランドから商品候補を探す**（`POST /api/import/search`）。候補を選ぶと既存の取込経路で写真・価格・カテゴリを取り込む。写真・手動登録でも同じ導線を使える
+- 属性: **袖丈**（半袖/長袖/ノースリーブ/七分袖）をカテゴリと直交する軸として保持。フィルタとチップに対応。**サイズは表記ゆれを名寄せ**（M / Ｍ / Mサイズ / メンズM）
 - 認証: Google ID token をWorkerでJWKS検証 → 7日JWT発行 → Secure Storage保存 → 再起動時 `GET /api/auth/me`
 - データ: D1をSource of Truth、全クエリを `user_id` でスコープ。Driftのローカルキャッシュ（ユーザー別、logout時に全消去）
 - クローゼット: 2/3/4列グリッド（密度保存）、カテゴリ横スクロール、インライン検索、複合フィルタ、ソート、Pull to Refresh、空状態・エラー時の非破壊表示
@@ -89,8 +90,8 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 
 | 対象 | 現在 | 要件（§82）との差 |
 | --- | --- | --- |
-| Worker（Vitest） | 35 tests | 認可・所有権、CRUD、Archive、検索/フィルタ/ソート、重複検知、画像メタデータ、処理状態、Google検証のモック、SSRFリダイレクト/DNS再検証が未（商品検索のURL検証・重複除外とカテゴリ推定は追加済み） |
-| Flutter | 7 tests | 認証状態、キャッシュ先行表示、アカウント切替の分離、スクロール復元、フィルタ、ソート、Detail、写真、Archive、画像フォールバックが未（URL取込・商品検索・カテゴリチップは追加済み） |
+| Worker（Vitest） | 37 tests | 認可・所有権、CRUD、Archive、検索/フィルタ/ソート、重複検知、画像メタデータ、処理状態、Google検証のモック、SSRFリダイレクト/DNS再検証が未（商品検索・カテゴリ／袖丈推定は追加済み） |
+| Flutter | 10 tests | 認証状態、キャッシュ先行表示、アカウント切替の分離、スクロール復元、ソート、Detail、写真、Archive、画像フォールバックが未（URL取込・商品検索・チップ・サイズ名寄せは追加済み） |
 | 端末スモーク（integration_test） | 2 tests | ONNX背景除去と4:5正規化。debug / profile で実行、releaseは `check-release-apk.sh` で代替 |
 
 ## テスト体制
@@ -136,6 +137,7 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 
 ## 更新履歴（新しい順）
 
+- 2026-09-13: 袖丈（半袖/長袖/ノースリーブ/七分袖）を属性として追加（migration `0003_sleeve.sql`、可視チップ＋AI推定＋フィルタ）。サイズの表記ゆれを名寄せ（M/Ｍ/Mサイズ/メンズM）。master-prompt を改訂し、カテゴリ・袖丈・フィルタ・groupIdの記述を実装に合わせた
 - 2026-09-13: カテゴリを実際に着る物へ調整（デニム・セットアップ・バッグ・オールインワンを削除、スーツを追加）。migration `0002_category_tuning.sql` をローカル・本番D1へ適用。ADR-005に記録
 - 2026-09-13: 写真登録を短縮。エディタを「写真・商品名・カテゴリ・保存」中心に再構成し、詳細は折りたたみ、保存をAppBarにも配置、撮影直後に名前へフォーカス、写真ソースの記憶、保存後の「続けて撮る」を追加。カテゴリは `POST /api/classify` で自動推定し、チップで1タップ修正
 - 2026-09-13: 商品名とブランドから商品候補を探す `POST /api/import/search` を追加（OpenAI web検索、許可ドメイン限定、URLは検索結果のみ）。エディタに「AIで商品を探す」を追加し、候補タップで写真・価格・カテゴリを取り込めるようにした。CIを並列化し、release APK検査はAndroid・依存の変更時のみ実行（8分21秒 → 通常2分台）

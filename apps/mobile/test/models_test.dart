@@ -9,6 +9,7 @@ void main() {
       'brand': 'AURALEE',
       'category': 'outerwear',
       'normalizedColor': 'beige',
+      'sleeve': 'long',
       'size': '3',
       'status': 'active',
       'createdAt': '2026-01-02',
@@ -20,6 +21,7 @@ void main() {
       'brand': 'COMOLI',
       'category': 'pants',
       'normalizedColor': 'blue',
+      'sleeve': null,
       'size': '2',
       'status': 'archived',
       'createdAt': '2026-01-01',
@@ -85,5 +87,61 @@ void main() {
     // 旧バージョンが保存した表示名でも同じ結果になる。
     final legacy = BrowseOptions(brand: 'ＳＮＩＤＥＬ');
     expect(legacy.apply(mixed).map((i) => i.id).toSet(), {'a', 'b'});
+  });
+
+  test('size spelling variants share one filter key', () {
+    expect(sizeKey('M'), 'm');
+    expect(sizeKey(' m '), 'm');
+    expect(sizeKey('Ｍ'), 'm');
+    expect(sizeKey('Mサイズ'), 'm');
+    expect(sizeKey('メンズM'), 'm');
+    expect(sizeKey('38cm'), '38');
+    expect(sizeKey('フリーサイズ'), 'フリー');
+    expect(sizeKey('LL'), isNot(sizeKey('L')));
+  });
+
+  test('sleeve and size filters work together', () {
+    final items = [
+      WardrobeItem({
+        'id': 'a',
+        'name': '半袖Tシャツ',
+        'category': 'tops',
+        'sleeve': 'short',
+        'size': 'Mサイズ',
+        'status': 'active',
+        'createdAt': '2026-03-01',
+        'images': [],
+      }),
+      WardrobeItem({
+        'id': 'b',
+        'name': '長袖シャツ',
+        'category': 'shirts',
+        'sleeve': 'long',
+        'size': 'M',
+        'status': 'active',
+        'createdAt': '2026-03-02',
+        'images': [],
+      }),
+    ];
+    final bySleeve = BrowseOptions(sleeve: 'short');
+    expect(bySleeve.apply(items).single.id, 'a');
+    // 「Mサイズ」と「M」は同じサイズとして一致する。
+    final bySize = BrowseOptions(size: 'm');
+    expect(bySize.apply(items).map((i) => i.id).toSet(), {'a', 'b'});
+    expect(BrowseOptions().apply(items).first.id, 'b');
+  });
+
+  test('Japanese sleeve label is searchable', () {
+    final items = [
+      WardrobeItem({
+        'id': 'a',
+        'name': 'Tシャツ',
+        'sleeve': 'short',
+        'status': 'active',
+        'createdAt': '2026-03-01',
+        'images': [],
+      }),
+    ];
+    expect(BrowseOptions(query: '半袖').apply(items).single.id, 'a');
   });
 }

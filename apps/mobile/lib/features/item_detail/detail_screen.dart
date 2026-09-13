@@ -70,6 +70,7 @@ class _DetailScreenState extends State<DetailScreen> {
       final details = {
         'category': 'カテゴリ',
         'originalColor': 'カラー',
+        'sleeve': '袖丈',
         'size': 'サイズ',
         'listPrice': '定価',
         'purchasePrice': '購入価格',
@@ -190,6 +191,9 @@ class _DetailScreenState extends State<DetailScreen> {
                                 child: Text(
                                   e.key == 'category'
                                       ? categories[item.text(e.key)] ??
+                                            item.text(e.key)
+                                      : e.key == 'sleeve'
+                                      ? sleeves[item.text(e.key)] ??
                                             item.text(e.key)
                                       : [
                                           'listPrice',
