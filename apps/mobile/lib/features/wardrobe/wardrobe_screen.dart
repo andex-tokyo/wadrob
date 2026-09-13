@@ -202,8 +202,8 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                   onChanged: (v) => setState(() => session.browse.query = v),
                 )
               : const Text(
-                  'WADROB',
-                  style: TextStyle(fontSize: 21, letterSpacing: 3),
+                  'WDRB',
+                  style: TextStyle(fontSize: 21, letterSpacing: 4),
                 ),
           actions: [
             IconButton(

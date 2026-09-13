@@ -1,6 +1,8 @@
-# WADROB / ワドロブ
+# WDRB（ワドロブ）
 
 Flutter Android + Cloudflare Workers/D1/R2で動く個人用デジタルクローゼット。ローカルcacheから即表示し、Google Sign-In、所有権付きCRUD、URL取込、写真/手動登録、検索、filter、sort、archive、端末内AI背景除去を備える。
+
+アプリの表示名は **WDRB**。リポジトリ名・Worker・D1/R2・Android applicationId（`tokyo.andex.wadrob`）は既存のまま変更しない（Google OAuth の登録やリソース名に紐づくため）。アイコンとスプラッシュは白地に黒文字のワードマークで、`python3 tool/generate_brand_assets.py` で再生成できる。
 
 ## Requirements
 

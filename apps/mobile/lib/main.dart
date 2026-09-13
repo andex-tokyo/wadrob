@@ -31,7 +31,7 @@ class WadrobApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
     return MaterialApp(
-      title: 'ワドロブ',
+      title: 'WDRB',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
@@ -91,11 +91,11 @@ class LoginScreen extends StatelessWidget {
           children: [
             const Spacer(flex: 2),
             const Text(
-              'WADROB',
+              'WDRB',
               style: TextStyle(
                 fontSize: 42,
                 fontWeight: FontWeight.w500,
-                letterSpacing: 8,
+                letterSpacing: 10,
               ),
             ),
             const SizedBox(height: 12),

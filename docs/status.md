@@ -75,6 +75,7 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 
 ## 実装済みの主要機能
 
+- ブランド: 表示名 WDRB。白地に黒文字のワードマークで、アイコン（アダプティブ含む）とスプラッシュをログイン画面と同じ Roboto に統一。`tool/generate_brand_assets.py` で再生成できる
 - 認証: Google ID token をWorkerでJWKS検証 → 7日JWT発行 → Secure Storage保存 → 再起動時 `GET /api/auth/me`
 - データ: D1をSource of Truth、全クエリを `user_id` でスコープ。Driftのローカルキャッシュ（ユーザー別、logout時に全消去）
 - クローゼット: 2/3/4列グリッド（密度保存）、カテゴリ横スクロール、インライン検索、複合フィルタ、ソート、Pull to Refresh、空状態・エラー時の非破壊表示
@@ -134,5 +135,6 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 
 ## 更新履歴（新しい順）
 
+- 2026-09-13: アプリ表示名を WDRB に変更。アイコン（レガシー + アダプティブ）とスプラッシュ（Android 12+ のシステムスプラッシュ含む）を白地・黒文字のワードマークに統一し、書体をログイン画面と同じ Roboto w500 に揃えた。文字の光学中心ズレを修正（スプラッシュ中心 47.6% → 49.9%）
 - 2026-09-13: 検証体制を3層に再編。`scripts/check.sh` / `check-release-apk.sh` / `smoke-device.sh` と GitHub Actions を追加。releaseのR8がONNXのJavaクラスを削除して保存直後にクラッシュする不具合を keep ルールで修正（`proguard-rules.pro`）。実機E2Eで 保存→R2→背景除去→詳細→編集→手放す まで確認
 - 2026-09-13: 進捗台帳を新設し初回コミット。ZOZOTOWN対応（Yahoo!店ミラー + Browser Run）、URL取込の `Illegal invocation` 修正、charset判定、ブランド表記ゆれの正規化、AI抽出の項目拡張（`gpt-5.6-luna`）

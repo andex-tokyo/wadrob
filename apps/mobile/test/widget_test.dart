@@ -11,8 +11,8 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   testWidgets('basic Material rendering works', (WidgetTester tester) async {
     await tester.pumpWidget(
-      const MaterialApp(home: Scaffold(body: Text('WADROB'))),
+      const MaterialApp(home: Scaffold(body: Text('WDRB'))),
     );
-    expect(find.text('WADROB'), findsOneWidget);
+    expect(find.text('WDRB'), findsOneWidget);
   });
 }

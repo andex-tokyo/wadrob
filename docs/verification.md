@@ -1,5 +1,16 @@
 # Verification record
 
+## Brand assets (2026-09-13)
+
+アプリ表示名を WDRB に変更し、アイコンとスプラッシュを白地・黒文字のワードマークへ統一した。
+
+- 書体: ログイン画面の描画と同じ Roboto（Weight 500）。Android端末の `/system/fonts/RobotoFlex-Regular.ttf` を取り出して `tool/fonts/` に同梱し、生成は `tool/generate_brand_assets.py`
+- アイコン: `mipmap-*/ic_launcher.png`（48〜192）と、Android 8+ のアダプティブアイコン（`mipmap-anydpi-v26/ic_launcher.xml` + `ic_launcher_foreground.png`、背景は白）
+- スプラッシュ: `drawable-nodpi/splash_logo.png` を `launch_background.xml` で中央配置し、Android 12+ は `values-v31/styles.xml` の `windowSplashScreenBackground` / `windowSplashScreenAnimatedIcon` で白地 + ワードマークに統一
+- 実機確認: ランチャーのアイコン表示、スプラッシュの白地 + WDRB、ログイン画面の WDRB 表記をスクリーンショットで確認（クローゼットのAppBarはコード変更のみ。サインイン状態で未確認）
+- スプラッシュの光学中心: 修正前 47.6% → 修正後 49.9%（画面高に対するワードマーク中心の実測値）
+- 生成画像のインク中心はアイコン・前景・スプラッシュすべてでキャンバス中心と一致することを座標で確認
+
 Verified on 2026-09-13:
 
 - Worker TypeScript typecheck: pass
