@@ -1,0 +1,4 @@
+SESSION_SECRET=replace-with-at-least-32-random-characters
+GOOGLE_SERVER_CLIENT_ID=your-web-oauth-client-id.apps.googleusercontent.com
+# OPENAI_API_KEY is optional; deterministic URL import works without it.
+OPENAI_MODEL=gpt-5.6-luna

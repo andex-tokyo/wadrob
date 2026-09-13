@@ -1,0 +1,163 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { decodeJwt } from 'jose';
+import { issueSession, verifySession } from '../src/auth';
+import { BrowserFetcher, ChainFetcher, SimpleFetcher, validateUrl, zozoYahooMirror, type PageFetcher } from '../src/fetcher';
+import { GenericHtmlParser, GenericJsonLdParser, OpenGraphParser, aiExtract, decodeHtml, importUrl, mergeFields, tidyLabel } from '../src/import';
+import { itemSchema, type Env } from '../src/model';
+
+describe('URL security', () => {
+  it.each(['file:///etc/passwd','http://localhost/x','http://127.0.0.1/x','http://169.254.169.254/latest','ftp://example.com/x'])('rejects %s', (url) => expect(() => validateUrl(url)).toThrow());
+  it('accepts public product URLs', () => expect(validateUrl('https://example.com/item#x').href).toBe('https://example.com/item'));
+});
+describe('product parsing', () => {
+  const html = `<html><head><meta property="og:title" content="Fallback"><meta property="og:image" content="https://cdn.example/a.jpg"></head><body><h1>HTML</h1><script type="application/ld+json">{"@type":"Product","name":"Coat","brand":{"name":"WADROB"},"offers":{"price":"15400","priceCurrency":"JPY"}}</script></body></html>`;
+  it('uses JSON-LD ahead of fallbacks', () => { const f = mergeFields(new GenericJsonLdParser().parse(html, ''), new OpenGraphParser().parse(html, ''), new GenericHtmlParser().parse(html, '')); expect(f.name.value).toBe('Coat'); expect(f.listPrice.value).toBe(15400); expect(f.imageUrls.value).toEqual(['https://cdn.example/a.jpg']); });
+});
+describe('sessions', () => {
+  it('round trips a scoped expiring token', async () => { const secret='a'.repeat(32), token=await issueSession('user-1',secret); expect(await verifySession(token,secret)).toBe('user-1'); expect(decodeJwt(token).aud).toBe('wadrob-mobile'); });
+  it('rejects another secret', async () => { const token=await issueSession('u','a'.repeat(32)); await expect(verifySession(token,'b'.repeat(32))).rejects.toThrow(); });
+});
+describe('items', () => {
+  it('allows name-only items and separates prices', () => { const item=itemSchema.parse({name:'シャツ',listPrice:15400,purchasePrice:2999}); expect(item.listPrice).toBe(15400); expect(item.purchasePrice).toBe(2999); });
+  it('rejects negative prices', () => expect(() => itemSchema.parse({name:'服',purchasePrice:-1})).toThrow());
+});
+
+const aiReply=(product:Record<string,unknown>)=>new Response(JSON.stringify({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify(product)}]}]}));
+const aiProduct={name:null,brand:null,category:'knitwear',subCategory:null,originalColor:null,normalizedColor:'gray',listPrice:null,currency:null,productCode:null,shopName:null};
+const env=(extra:Partial<Env>={})=>({OPENAI_API_KEY:'test-key',OPENAI_MODEL:'gpt-5.6-luna',...extra}) as Env;
+const htmlFetcher=(html:string):PageFetcher=>({get:async()=>({bytes:new TextEncoder().encode(html),url:'https://shop.example/item',type:'text/html'})});
+const jsonLd=`<script type="application/ld+json">{"@type":"Product","name":"コットンニット","brand":{"name":"AURALEE"},"offers":{"price":"15400","priceCurrency":"JPY"}}</script>`;
+
+afterEach(()=>vi.unstubAllGlobals());
+
+describe('AI assisted import', () => {
+  it('maps structured output to owned fields', async () => {
+    const fields=await aiExtract('page text',env(),async()=>aiReply(aiProduct));
+    expect(fields.category).toEqual({value:'knitwear',source:'ai',confidence:.5});
+    expect(fields.normalizedColor?.value).toBe('gray');
+  });
+  it('drops unknown enum values without losing the rest', async () => {
+    const fields=await aiExtract('page text',env(),async()=>aiReply({...aiProduct,brand:'AURALEE',category:'camisole'}));
+    expect(fields.category).toBeUndefined();
+    expect(fields.brand?.value).toBe('AURALEE');
+  });
+  it('converts non-JPY prices to minor units', async () => {
+    const fields=await aiExtract('page text',env(),async()=>aiReply({...aiProduct,listPrice:120,currency:'USD'}));
+    expect(fields.listPrice?.value).toBe(12000);
+    expect(fields.currency?.value).toBe('USD');
+  });
+  it('ignores a zero price', async () => {
+    const fields=await aiExtract('page text',env(),async()=>aiReply({...aiProduct,listPrice:0,currency:'JPY'}));
+    expect(fields.listPrice).toBeUndefined();
+  });
+  it('reports OpenAI failures through warnings', async () => {
+    vi.stubGlobal('fetch',async()=>new Response('nope',{status:429}));
+    const result=await importUrl('https://shop.example/item',env(),htmlFetcher(`<html><body>${jsonLd}</body></html>`));
+    expect(result.warnings).toContain('補助解析を利用できませんでした');
+  });
+});
+
+describe('AI fallback triggering', () => {
+  it('runs when a deterministic source leaves category or color empty', async () => {
+    const calls=vi.fn(async()=>aiReply(aiProduct));
+    vi.stubGlobal('fetch',calls);
+    const result=await importUrl('https://shop.example/item',env(),htmlFetcher(`<html><body>${jsonLd}</body></html>`));
+    expect(calls).toHaveBeenCalledTimes(1);
+    expect(result.draft.category).toBe('knitwear');
+    expect(result.draft.normalizedColor).toBe('gray');
+    expect(result.draft.name).toBe('コットンニット');
+    expect(result.draft.brand).toBe('AURALEE');
+    expect(result.fields.brand.source).toBe('json_ld');
+    expect(result.draft.listPrice).toBe(15400);
+  });
+  it('skips the API when no key is configured', async () => {
+    const calls=vi.fn(async()=>aiReply(aiProduct));
+    vi.stubGlobal('fetch',calls);
+    const result=await importUrl('https://shop.example/item',env({OPENAI_API_KEY:undefined}),htmlFetcher(`<html><body>${jsonLd}</body></html>`));
+    expect(calls).not.toHaveBeenCalled();
+    expect(result.draft.category).toBeUndefined();
+    expect(result.draft.name).toBe('コットンニット');
+  });
+});
+
+describe('label tidying', () => {
+  it('strips decoration and a trailing shop name', () => {
+    expect(tidyLabel('【新品】ウールコート | ZOZOTOWN','ZOZOTOWN')).toBe('ウールコート');
+    expect(tidyLabel('  wool   coat  ')).toBe('wool coat');
+    expect(tidyLabel('ウールコート | ZOZOTOWN')).toBe('ウールコート | ZOZOTOWN');
+    expect(tidyLabel(null)).toBeUndefined();
+  });
+  it('handles mall titles that wrap the shop name', () => {
+    expect(tidyLabel('ひらっと心が躍る。シアーカーディガンce1260606 | [公式]Classical Elf（クラシカルエルフ）通販','Classical Elf'))
+      .toBe('ひらっと心が躍る。シアーカーディガンce1260606');
+    expect(tidyLabel('＜二宮こずえさん出演YouTube紹介アイテム＞【追加予約】パールボタンニットベスト | [公式]カレンソロジー（Curensology）通販','Curensology'))
+      .toBe('パールボタンニットベスト');
+  });
+});
+
+describe('page decoding', () => {
+  it('decodes EUC-JP pages instead of corrupting them', () => {
+    const euc=Uint8Array.from([0xa5,0xd6,0xa5,0xe9,0xa5,0xc3,0xa5,0xaf]);
+    expect(decodeHtml(euc,'EUC-JP')).toBe('ブラック');
+    // 宣言が無いバイト列は判定できないためUTF-8として扱う。
+    expect(decodeHtml(euc)).toBe(new TextDecoder().decode(euc));
+  });
+  it('reads the charset from a meta tag', () => {
+    const html=Uint8Array.from([...new TextEncoder().encode('<meta http-equiv="Content-Type" content="text/html; charset=EUC-JP">'),0xa5,0xd6,0xa5,0xe9,0xa5,0xc3,0xa5,0xaf]);
+    expect(decodeHtml(html)).toContain('ブラック');
+  });
+  it('keeps UTF-8 pages unchanged', () => {
+    expect(decodeHtml(new TextEncoder().encode('ニット'))).toBe('ニット');
+  });
+});
+
+describe('page fetching', () => {
+  it('calls fetch without a this binding', async () => {
+    const seen: { receiver?: unknown } = {};
+    const fake = function (this: unknown) {
+      seen.receiver = this;
+      return Promise.resolve(new Response('<html><body>ok</body></html>', { status: 200, headers: { 'content-type': 'text/html' } }));
+    } as unknown as typeof fetch;
+    const page = await new SimpleFetcher(fake, async () => {}).get('https://example.com/item', 'html');
+    expect(seen.receiver).toBeUndefined();
+    expect(new TextDecoder().decode(page.bytes)).toContain('ok');
+  });
+  it('renders bot-protected pages through Browser Run', async () => {
+    const calls: unknown[] = [];
+    const browser = {
+      quickAction: async (action: string, options: unknown) => {
+        calls.push([action, options]);
+        return Response.json({ success: true, result: '<html><body>ZOZO ZOZOTOWN</body></html>', meta: { status: 200, title: 't' } });
+      },
+    } as unknown as BrowserRun;
+    const page = await new BrowserFetcher(browser, async () => {}).get('https://zozo.jp/shop/coen/goods/1/', 'html');
+    expect(calls.length).toBe(1);
+    expect(new TextDecoder().decode(page.bytes)).toContain('ZOZOTOWN');
+  });
+  it('rejects a Browser Run error response', async () => {
+    const browser = { quickAction: async () => Response.json({ success: false }, { status: 429 }) } as unknown as BrowserRun;
+    await expect(new BrowserFetcher(browser, async () => {}).get('https://zozo.jp/x', 'html')).rejects.toThrow();
+  });
+  it('rejects a rendered block page', async () => {
+    const browser = { quickAction: async () => Response.json({ success: true, result: '<html><head><title>Access Denied</title></head><body>Access Denied</body></html>', meta: { status: 403, title: 'Access Denied' } }) } as unknown as BrowserRun;
+    await expect(new BrowserFetcher(browser, async () => {}).get('https://zozo.jp/x', 'html')).rejects.toThrow();
+  });
+  it('maps ZOZO goods to the Yahoo! Shopping mirror', () => {
+    expect(zozoYahooMirror('https://zozo.jp/shop/publictokyo/goods/82019293/?pno=1')).toBe('https://store.shopping.yahoo.co.jp/zozo/82019293.html');
+    expect(zozoYahooMirror('https://zozo.jp/category/tops/')).toBeUndefined();
+    expect(zozoYahooMirror('https://example.com/shop/a/goods/1/')).toBeUndefined();
+  });
+  it('tries each fetcher in order and only moves on after a failure', async () => {
+    const page = { bytes: new Uint8Array(), url: 'https://x/', type: 'text/html' };
+    const ok: PageFetcher = { get: async () => page };
+    const failing: PageFetcher = { get: async () => { throw new Error('boom'); } };
+    let fallbacks = 0;
+    const primaryFirst = new ChainFetcher([ok, failing], () => { fallbacks++; });
+    expect(await primaryFirst.get('https://x/', 'html')).toBe(page);
+    expect(fallbacks).toBe(0);
+    const secondaryFirst = new ChainFetcher([failing, ok], () => { fallbacks++; });
+    expect(await secondaryFirst.get('https://x/', 'html')).toBe(page);
+    expect(fallbacks).toBe(1);
+    await expect(new ChainFetcher([failing, failing], () => { fallbacks++; }).get('https://x/', 'html')).rejects.toThrow();
+  });
+});

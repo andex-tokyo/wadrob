@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "wadrob-api",
+  "account_id": "5d9c68bca6f685d588240bfb6bc7ec79",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [{"binding":"DB","database_name":"wadrob-db","database_id":"b74b809b-b152-4ba7-a0d7-7bb9f2145ad5","migrations_dir":"migrations"}],
+  "r2_buckets": [{"binding":"IMAGES","bucket_name":"wadrob-images"}],
+  "browser": {"binding":"BROWSER"},
+  "vars": {"GOOGLE_SERVER_CLIENT_ID":"716602977800-6nmaih1hdrvvdp3498oclef4j8eeuo5j.apps.googleusercontent.com","OPENAI_MODEL":"gpt-5.6-luna"}
+}

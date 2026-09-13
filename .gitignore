@@ -1,0 +1,9 @@
+node_modules/
+.wrangler/
+.dev.vars
+.env
+*.jks
+*.keystore
+.DS_Store
+coverage/
+wadrob-emulator.png
