@@ -6,7 +6,9 @@
 
 - 原因: 商品ページの画像はJSON-LD `image` と `og:image` の1枚しか見ていなかった（実ページにはギャラリーがある）
 - `collectPageImages()` を追加し、DOMの `<img>`（`src`/`data-src`/`data-original`/`srcset`）から最大12枚を収集。JSON-LD/OGPの画像を先頭に置く
-- UI/装飾（sprite・logo・banner・designAssets・elements・symbols・assets等）と静的アセットホスト（`s.yimg.jp`）、小さいサムネイル表記（`_50.jpg`等）を除外。実測で Yahoo!ショッピングのページから12枚の商品画像を取得
+- UI/装飾（sprite・logo・banner・designAssets・elements・symbols・assets等）と静的アセットホスト（`s.yimg.jp`）、小さいサムネイル表記（`_50`・`_100`・`_300`等）を除外
+- ギャラリーがJS/JSONの中にだけ相対URLで入っているショップ（楽天の旧テンプレート）にも対応するため、HTML全体のテキストも走査する
+- 実測（従来はいずれもJSON-LD/OGPの1枚のみ）: Yahoo!ショッピング 1→12 / 楽天市場 1→12 / UNIQLO 1→12 / andST（dot-st） 1→4
 - アプリ: 取込直後に画像選択モーダルを開き、既定は1枚。タップで追加/解除し、番号順が並び順になる。撮影した写真も候補に加わる。「画像を選ぶ（N枚から）」で再選択できる
 - Worker Vitest 39 tests（DOM収集のフィルタ・重複除去・上限）、Flutter 11 tests（モーダルで2枚目を選ぶと保存payloadが `[{url:a},{url:b}]` になることを検証）
 

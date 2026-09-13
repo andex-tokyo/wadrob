@@ -171,6 +171,16 @@ describe('gallery images', () => {
     );
     expect(collectPageImages(html, 'https://shop.example/item').length).toBe(12);
   });
+  it('finds gallery URLs embedded in scripts as relative paths', () => {
+    const html = page(
+      `<script>var gallery=["/img/932/item_1.jpg","/img/932/item_2.jpg","/img/932/item_3.jpg"];</script>`,
+    );
+    expect(collectPageImages(html, 'https://item.example/shop/a/')).toEqual([
+      'https://item.example/img/932/item_1.jpg',
+      'https://item.example/img/932/item_2.jpg',
+      'https://item.example/img/932/item_3.jpg',
+    ]);
+  });
 });
 
 describe('page decoding', () => {

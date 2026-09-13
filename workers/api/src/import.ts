@@ -53,6 +53,10 @@ export function collectPageImages(html:string,pageUrl:string,limit=12):string[]{
   const srcset=img.getAttribute('srcset');
   if(srcset)for(const part of srcset.split(',')){const url=part.trim().split(/\s+/)[0];if(url)raw.push(url);}
  }
+ // ギャラリーはJS/JSONの中にだけURLが入っていることがある（楽天の旧テンプレート等）。
+ for(const match of html.matchAll(/(?:https?:)?\/\/[^\s"'\\<>()]{4,300}?\.(?:jpe?g|png|webp)|\/[^\s"'\\<>()]{2,300}?\.(?:jpe?g|png|webp)/gi)){
+  raw.push(match[0]);
+ }
  const out:string[]=[],seen=new Set<string>();
  for(const value of raw){
   let url:URL;try{url=new URL(value,pageUrl);}catch{continue;}
@@ -64,7 +68,7 @@ export function collectPageImages(html:string,pageUrl:string,limit=12):string[]{
   // ショップの静的アセット配信ホスト（商品画像CDNとは別）
   if(['s.yimg.jp','s.yimg.com'].includes(url.hostname.toLowerCase()))continue;
   // 極端に小さいサムネイル表記を除外（_50.jpg, _100.jpg, _thumb.jpg 等）
-  if(/[_\-]([0-9]{1,2}|1[0-9]{2})\.[a-z]+$/.test(path))continue;
+  if(/[_\-](50|80|100|120|150|200|250|300|320|350|400)(x[0-9]{2,4})?\.[a-z]+$/.test(path))continue;
   if(/[_\-](s|t|ss|thumb|small)\.[a-z]+$/.test(path))continue;
   const key=url.host+url.pathname;
   if(seen.has(key))continue;

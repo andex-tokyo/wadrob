@@ -44,11 +44,21 @@ Browser Runの描画結果が403や「Access Denied」のブロックページ�
 ### 商品画像の候補（2026-09-13）
 
 JSON-LDとOGPは商品画像を1枚しか持たないことが多く、実ページにはギャラリーがある。
-そのため `collectPageImages()` でDOMの `<img>`（`src` / `data-src` / `data-original` / `srcset`）から商品画像を最大12枚集め、JSON-LD/OGPの画像を先頭に足して候補にする。
+そのため `collectPageImages()` で商品画像を最大12枚集め、JSON-LD/OGPの画像を先頭に足して候補にする。収集元は次の2つ。
+
+- DOMの `<img>`（`src` / `data-src` / `data-original` / `srcset`）
+- HTML全体のテキスト。ギャラリーがJS/JSONの中にだけ相対URLで入っているショップ（楽天の旧テンプレート等）に対応する
 
 - 装飾・UI・プレースホルダ（sprite / logo / icon / banner / btn / blank / designAssets / elements / symbols / assets など）と、静的アセット配信ホスト（`s.yimg.jp` 等）は除外
-- 極端に小さいサムネイル表記（`_50.jpg` `_100.jpg` `_thumb.jpg` 等）は除外し、500px級の画像を残す
+- 小さいサムネイル表記（`_50` `_100` `_150` `_300` `_thumb` 等）は除外し、`_500` や `_12` のような商品画像は残す
 - 同一パスは重複除去。URLは推測せずDOMにあるものだけを使う
-- 実測: Yahoo!ショッピングの商品ページで1枚 → **12枚**（従来はJSON-LD/OGPの1枚のみ）
+- 実測（従来はいずれもJSON-LD/OGPの1枚のみ）
+
+| ショップ | 従来 | 現在 |
+| --- | --- | --- |
+| Yahoo!ショッピング（ZOZO店 2件） | 1 | 12 |
+| 楽天市場（2店） | 1 | 12 |
+| UNIQLO | 1 | 12 |
+| andST（dot-st.com 2件） | 1 | 4 |
 - 返した候補はクライアントが既存の `POST /api/import/url` に渡すため、抽出は決定的解析 + 既存AI補助の経路を通る（検索結果をそのまま信用しない）
 - 1回あたり Web検索 $0.01 + トークン、実測5〜6秒。候補が0件でも失敗にせず、URL手入力へ案内する
