@@ -213,15 +213,18 @@ describe('gallery images', () => {
     expect(images).toHaveLength(6);
     expect(images.every((url) => url.includes('123456'))).toBe(true);
   });
-  it('keeps the dominant gallery group and drops related products', () => {
+  it('matches alphanumeric product codes and drops related products', () => {
     const own = Array.from(
-      { length: 6 },
-      (_, n) => `<img src="https://cdn.example/goods/item_${n}.jpg">`,
+      { length: 5 },
+      (_, n) => `<img src="https://cdn.example/goods/yctops82_${n}.jpg">`,
     ).join('');
     const related = `<img src="https://cdn.example/rel/other_1.jpg"><img src="https://cdn.example/rel/other_2.jpg">`;
-    const images = collectPageImages(page(own + related), 'https://shop.example/items/999/');
-    expect(images).toHaveLength(6);
-    expect(images.every((url) => url.includes('/goods/item_'))).toBe(true);
+    const images = collectPageImages(
+      page(own + related),
+      'https://shop.example/lingxiayuu/yctops82.html',
+    );
+    expect(images).toHaveLength(5);
+    expect(images.every((url) => url.includes('yctops82'))).toBe(true);
   });
   it('merges the same image with a different query string', () => {
     expect(

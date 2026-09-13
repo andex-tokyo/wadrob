@@ -64,7 +64,10 @@ export function collectPageImages(html:string,pageUrl:string,limit=40,known:stri
   const path=url.pathname.toLowerCase();
   if(!/\.(jpe?g|png|webp)$/.test(path))continue;
   // 装飾・UI・プレースホルダを除外
-  if(/(sprite|logo|icon|banner|bnr|btn|blank|spacer|pixel|loading|noimage|common\/|designassets\/|elements\/|symbols\/|\/assets\/|\/static\/|chip|wash|sizechart|size_chart|top_ttl|staff_styling)/.test(path))continue;
+  // 除外はパス区切りを意識する（asiancommon/ のような正当なパスを巻き込まない）。
+  if(/(sprite|logo|icon|banner|bnr|btn|blank|spacer|pixel|loading|noimage|designassets\/|elements\/|symbols\/|\/assets\/|\/static\/|chip|sizechart|size_chart|top_ttl|staff_styling)/.test(path))continue;
+  if(/(^|\/)common\//.test(path))continue;
+  if(/(^|[\/_\-])wash([\/_\-.]|$)/.test(path))continue;
   // ショップの静的アセット配信ホスト（商品画像CDNとは別）
   if(['s.yimg.jp','s.yimg.com'].includes(url.hostname.toLowerCase()))continue;
   // 極端に小さいサムネイル表記を除外（_50.jpg, _100.jpg, _thumb.jpg 等）
@@ -89,17 +92,7 @@ export function collectPageImages(html:string,pageUrl:string,limit=40,known:stri
  }
  const matches=out.filter(url=>[...tokens].some(token=>url.includes(token)));
  const ordered=matches.length>=5?matches:out;
- // 同一商品のギャラリーはファイル名の先頭が揃う（106137321b_*, yctops82_*, 4021570436_*）。
- // 最頻のグループが5枚以上あれば、そこだけを残して関連商品の混入を防ぐ。
- const groups=new Map<string,string[]>();
- for(const url of ordered){
-  const stem=(url.split('/').pop()??'').split(/[_.]/)[0].replace(/-\d+$/,'');
-  const group=groups.get(stem)??[];
-  group.push(url);
-  groups.set(stem,group);
- }
- const dominant=[...groups.values()].sort((a,b)=>b.length-a.length)[0];
- return (dominant&&dominant.length>=5?dominant:ordered).slice(0,limit);
+ return ordered.slice(0,limit);
 }
 
 // 同じ画像の別クエリ（?width=600 等）を1つにまとめる。
