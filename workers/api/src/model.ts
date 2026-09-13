@@ -11,6 +11,8 @@ export const itemSchema = z.object({
  productCode:text, sku:text, shopName:text, sourceUrl:z.string().url().max(4096).refine(v=>/^https?:/.test(v)).nullable().optional(),
  description:z.string().max(10000).nullable().optional(), status:z.enum(['active','archived']).default('active'), groupId:text,
  imageIds:z.array(z.string().uuid()).max(8).optional(), imageUrls:z.array(z.string().url().max(4096)).max(8).optional(),
+ // 表示順つきの画像。先頭がメイン画像になる。imageIds/imageUrls は後方互換のため残す。
+ images:z.array(z.union([z.object({id:z.string().uuid()}),z.object({url:z.string().url().max(4096)})])).max(8).optional(),
 }).strict();
 export const column = (key:string) => key.replace(/[A-Z]/g, x=>'_'+x.toLowerCase());
 export const camel = (row:Record<string,unknown>) => Object.fromEntries(Object.entries(row).map(([k,v])=>[k.replace(/_([a-z])/g,(_,c:string)=>c.toUpperCase()),v]));

@@ -16,7 +16,7 @@
 | 項目 | 値 |
 | --- | --- |
 | API | `https://wadrob-api.tsuchida.workers.dev` |
-| Worker | `wadrob-api` 最新 version `f90b0b74-1e3b-4b59-9651-b15702ab0390`（2026-09-13、袖丈を追加） |
+| Worker | `wadrob-api` 最新 version `3b45d97e-4b6c-428b-b800-12eeb2ee382c`（2026-09-13、画像の順序指定に対応） |
 | D1 / R2 | `wadrob-db` / `wadrob-images`（Browser Run binding `BROWSER` あり） |
 | AI | `gpt-5.6-luna`（`OPENAI_API_KEY` 登録済み、`reasoning.effort: none`） |
 | 端末 | Pixel 6a エミュレータ（Android 36.1）、release APK インストール済み・Googleログイン済み |
@@ -79,6 +79,7 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 
 - ブランド: 表示名 WDRB。白地に黒文字のワードマークで、アイコン（アダプティブ含む）とスプラッシュをログイン画面と同じ Roboto に統一。`tool/generate_brand_assets.py` で再生成できる
 - 登録の入口: URL取込に加えて、**商品名とブランドから商品候補を探す**（`POST /api/import/search`）。候補を選ぶと既存の取込経路で写真・価格・カテゴリを取り込む。写真・手動登録でも同じ導線を使える
+- 画像の選択: URL取込で入った複数画像から**メインを選び、不要な画像を外せる**（保存時の順序が `sort_order` / `is_primary` になる）
 - 属性: **袖丈**（半袖/長袖/ノースリーブ/七分袖）をカテゴリと直交する軸として保持。フィルタとチップに対応。**サイズは表記ゆれを名寄せ**（M / Ｍ / Mサイズ / メンズM）
 - 認証: Google ID token をWorkerでJWKS検証 → 7日JWT発行 → Secure Storage保存 → 再起動時 `GET /api/auth/me`
 - データ: D1をSource of Truth、全クエリを `user_id` でスコープ。Driftのローカルキャッシュ（ユーザー別、logout時に全消去）
@@ -139,6 +140,7 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 
 ## 更新履歴（新しい順）
 
+- 2026-09-13: URL取込の画像から**メインを選ぶ／不要な画像を外す**UIを追加。保存APIは `images: [{id}|{url}]` の順序つき配列を受け取る（`imageIds`/`imageUrls` は後方互換で維持）
 - 2026-09-13: 配布用のアップロード鍵を作成し、releaseビルドに設定（`key.properties` はgit管理外）。AAB/APKを同鍵で再生成。Play Consoleの開発者確認に登録するSHA-1/SHA-256と公開鍵（.pem）を用意
 - 2026-09-13: 袖丈（半袖/長袖/ノースリーブ/七分袖）を属性として追加（migration `0003_sleeve.sql`、可視チップ＋AI推定＋フィルタ）。サイズの表記ゆれを名寄せ（M/Ｍ/Mサイズ/メンズM）。master-prompt を改訂し、カテゴリ・袖丈・フィルタ・groupIdの記述を実装に合わせた
 - 2026-09-13: カテゴリを実際に着る物へ調整（デニム・セットアップ・バッグ・オールインワンを削除、スーツを追加）。migration `0002_category_tuning.sql` をローカル・本番D1へ適用。ADR-005に記録

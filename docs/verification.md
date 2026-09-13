@@ -1,5 +1,13 @@
 # Verification record
 
+## Image selection on import (2026-09-13)
+
+URL取込で入る複数画像から、採用する画像を選べるようにした（Worker version `3b45d97e-4b6c-428b-b800-12eeb2ee382c`）。
+
+- エディタのプレビューで、タップ＝メイン（一覧の1枚目）、×＝使わない画像を外す。先頭に「メイン」バッジを表示
+- 保存APIは `images: [{id}|{url}]` の順序つき配列を受け取る。先頭が `is_primary=1` / `sort_order=0`、以降は順に `sort_order` が入る。既存の `imageIds` / `imageUrls` も後方互換で受理（古いAPKが動き続ける）
+- Flutter test 11 tests（3枚→メイン選択→1枚削除→保存payloadが `[{url:b},{url:a}]` の順になることを検証）
+
 ## Release signing (2026-09-13)
 
 配布用のアップロード鍵を作成し、releaseビルドをこの鍵で署名するようにした。

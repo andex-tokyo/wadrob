@@ -12,7 +12,9 @@
 
 - `GET /api/items?status=active&category=&brand=&normalizedColor=&sleeve=&size=&search=&sort=recent` → `{ items }`。
 - `GET /api/items/:id` → `{ item }`。
-- `POST /api/items` / `PUT /api/items/:id` — 商品fieldと `imageIds` / `imageUrls`。`name`のみ必須。`sleeve` は `short|long|sleeveless|three_quarter`。金額は0以上の整数。通貨は3文字。URLはHTTP/HTTPS。
+- `POST /api/items` / `PUT /api/items/:id` — 商品fieldと画像。`name`のみ必須。`sleeve` は `short|long|sleeveless|three_quarter`。金額は0以上の整数。通貨は3文字。URLはHTTP/HTTPS。
+  - 画像は `images: [{id}|{url}, ...]` の**順序つき配列**で渡す。先頭がメイン画像（`is_primary=1`、`sort_order=0`）になり、URLの画像は保存時にR2へ取り込む。最大8枚。
+  - `imageIds` / `imageUrls` も後方互換で受け付ける（`images` があればそちらを優先）。
 - `POST /api/items/:id/archive` → `{ item }`。
 - `DELETE /api/items/:id` → `{ ok: true }`。
 

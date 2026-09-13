@@ -22,13 +22,33 @@ class EditorScreen extends StatefulWidget {
   State<EditorScreen> createState() => _EditorScreenState();
 }
 
+/// メイン画像を示す小さなバッジ。
+class _ImageBadge extends StatelessWidget {
+  const _ImageBadge(this.label);
+  final String label;
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: const Color(0xff252522),
+      borderRadius: BorderRadius.circular(3),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 11, color: Colors.white),
+      ),
+    ),
+  );
+}
+
 class _EditorScreenState extends State<EditorScreen> {
   final formKey = GlobalKey<FormState>();
   final url = TextEditingController();
   final nameFocus = FocusNode();
   final fields = <String, TextEditingController>{};
-  final imageIds = <String>[];
-  final imageUrls = <String>[];
+  // 画像は表示順そのまま。先頭がメイン画像になる。
+  // 登録済み/アップロード済みは 'id'、URL取込の未取得画像は 'url' を持つ。
   final previews = <Map<String, dynamic>>[];
   List<Map<String, dynamic>> candidates = [];
   String? category, color, sleeve, message;
@@ -62,7 +82,6 @@ class _EditorScreenState extends State<EditorScreen> {
     color = widget.item?.data['normalizedColor'] as String?;
     sleeve = widget.item?.data['sleeve'] as String?;
     for (final image in widget.item?.images ?? <Map<String, dynamic>>[]) {
-      imageIds.add(image['id'] as String);
       previews.add(image);
     }
     if (widget.mode == 'photo') {
@@ -222,8 +241,11 @@ class _EditorScreenState extends State<EditorScreen> {
     if (sleeve == null && sleeves.containsKey(importedSleeve)) {
       sleeve = importedSleeve;
     }
-    imageUrls.addAll((draft['imageUrls'] as List? ?? []).cast<String>());
-    previews.addAll(imageUrls.map((u) => {'originalUrl': u}));
+    previews.addAll(
+      (draft['imageUrls'] as List? ?? []).cast<String>().map(
+        (u) => {'url': u, 'originalUrl': u},
+      ),
+    );
     message = result['duplicate'] == true
         ? 'この商品はすでに登録されている可能性があります'
         : (result['warnings'] as List? ?? []).join('\n');
@@ -278,7 +300,6 @@ class _EditorScreenState extends State<EditorScreen> {
       final bytes = await file.readAsBytes();
       if (bytes.length > 10000000) throw Exception('10MB以下の画像を選択してください');
       final image = await ImageService(widget.session.api).upload(bytes);
-      imageIds.add(image['id'] as String);
       previews.add(image);
       unawaited(ImageService(widget.session.api).process(image));
       // 撮った直後に名前を入力できるようキーボードを出す。
@@ -307,8 +328,13 @@ class _EditorScreenState extends State<EditorScreen> {
         'normalizedColor': color,
         'sleeve': sleeve,
         'status': widget.item?.text('status') ?? 'active',
-        'imageIds': imageIds,
-        'imageUrls': imageUrls,
+        'images': [
+          for (final preview in previews)
+            if (preview['id'] != null)
+              {'id': preview['id']}
+            else if (preview['url'] != null)
+              {'url': preview['url']},
+        ],
       };
       for (final key in ['listPrice', 'purchasePrice']) {
         data[key] = int.tryParse(fields[key]!.text.trim());
@@ -434,10 +460,55 @@ class _EditorScreenState extends State<EditorScreen> {
                   separatorBuilder: (_, _) => const SizedBox(width: 12),
                   itemBuilder: (_, n) => SizedBox(
                     width: 210,
-                    child: ItemImage(
-                      api: widget.session.api,
-                      image: previews[n],
-                      thumbnail: false,
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: GestureDetector(
+                            onTap: n == 0
+                                ? null
+                                : () => setState(() {
+                                    final picked = previews.removeAt(n);
+                                    previews.insert(0, picked);
+                                  }),
+                            child: ItemImage(
+                              api: widget.session.api,
+                              image: previews[n],
+                              thumbnail: false,
+                            ),
+                          ),
+                        ),
+                        if (n == 0)
+                          const Positioned(
+                            left: 8,
+                            top: 8,
+                            child: _ImageBadge('メイン'),
+                          )
+                        else
+                          Positioned(
+                            left: 0,
+                            bottom: 0,
+                            child: TextButton(
+                              onPressed: () => setState(() {
+                                final picked = previews.removeAt(n);
+                                previews.insert(0, picked);
+                              }),
+                              child: const Text(
+                                'メインにする',
+                                style: TextStyle(fontSize: 11),
+                              ),
+                            ),
+                          ),
+                        Positioned(
+                          right: 0,
+                          top: 0,
+                          child: IconButton(
+                            tooltip: 'この画像を使わない',
+                            onPressed: () =>
+                                setState(() => previews.removeAt(n)),
+                            icon: const Icon(Icons.close, size: 18),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -447,6 +518,14 @@ class _EditorScreenState extends State<EditorScreen> {
                 onPressed: busy ? null : () => pickPhoto(choose: true),
                 icon: const Icon(Icons.add_photo_alternate_outlined),
                 label: const Text('写真を追加'),
+              ),
+            if (previews.length > 1)
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'タップするとその画像をメイン（一覧の1枚目）にします。×で使わない画像を外せます。',
+                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                ),
               ),
             input('name', focus: nameFocus, onSubmitted: classify),
             input('brand'),

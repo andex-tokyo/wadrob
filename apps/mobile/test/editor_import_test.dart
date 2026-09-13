@@ -15,6 +15,7 @@ class _StubAdapter implements HttpClientAdapter {
   _StubAdapter(this.responses);
   final Map<String, Map<String, dynamic>> responses;
   final calls = <String>[];
+  final bodies = <Map<String, dynamic>>[];
   @override
   void close({bool force = false}) {}
   @override
@@ -24,6 +25,8 @@ class _StubAdapter implements HttpClientAdapter {
     Future<void>? cancelFuture,
   ) async {
     calls.add(options.path);
+    final data = options.data;
+    if (data is Map) bodies.add(Map<String, dynamic>.from(data));
     return ResponseBody.fromString(
       jsonEncode(
         responses[options.path] ??
@@ -166,5 +169,58 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('ベージュ'), findsOneWidget);
     expect(find.text('88000'), findsOneWidget);
+  });
+
+  testWidgets('URL取込の画像からメインを選び、不要な画像を外せる', (tester) async {
+    tester.view.physicalSize = const Size(1200, 3000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    SharedPreferences.setMockInitialValues({});
+    const a = 'https://shop.example/a.jpg';
+    const b = 'https://shop.example/b.jpg';
+    const c = 'https://shop.example/c.jpg';
+    final adapter = _StubAdapter({
+      '/api/import/url': draftResponse({
+        'name': 'コットンニット',
+        'imageUrls': [a, b, c],
+        'sourceUrl': 'https://shop.example/item',
+      }),
+      '/api/items': {
+        'item': {'id': 'x', 'name': 'コットンニット', 'images': []},
+      },
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EditorScreen(session: await sessionWith(adapter), mode: 'url'),
+      ),
+    );
+    await tester.enterText(
+      find.byType(TextField).first,
+      'https://shop.example/item',
+    );
+    await tester.tap(find.text('商品情報を読み込む'));
+    await tester.pumpAndSettle();
+
+    // 3枚のうち1枚がメイン、残り2枚は「メインにする」で選べる。
+    expect(find.text('メイン'), findsOneWidget);
+    expect(find.text('メインにする'), findsNWidgets(2));
+
+    // 2枚目（b）をメインにする。
+    await tester.tap(find.text('メインにする').first);
+    await tester.pumpAndSettle();
+
+    // 最後の1枚（c）を外す。
+    await tester.tap(find.byIcon(Icons.close).last);
+    await tester.pumpAndSettle();
+    expect(find.text('メインにする'), findsOneWidget);
+
+    // 保存時の順序が [b, a] になっている。
+    await tester.tap(find.text('保存').first);
+    await tester.pumpAndSettle();
+    expect(adapter.bodies.last['images'], [
+      {'url': b},
+      {'url': a},
+    ]);
   });
 }
