@@ -69,5 +69,10 @@ void main() {
 
     expect(find.text('クローゼット'), findsNothing);
     expect(find.byKey(const ValueKey('add-item-button')), findsOneWidget);
+    final addButton = tester.widget<FloatingActionButton>(
+      find.byKey(const ValueKey('add-item-button')),
+    );
+    expect(addButton.backgroundColor, Colors.black);
+    expect(addButton.foregroundColor, Colors.white);
   });
 }

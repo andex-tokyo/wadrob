@@ -9,7 +9,7 @@
 - 新規保存・URL取込・AI分類でも、旧 `knitwear` とオールインワン / つなぎ / ジャンプスーツ / カバーオールをトップスへ正規化する
 - トップスとシャツの一覧に「すべて / 半袖 / 長袖 / ノースリーブ / 七分袖」を追加。両カテゴリ間では選択を維持し、他カテゴリへ移ると解除するwidget testを追加
 - 一覧部分の左右スワイプで前後のカテゴリへ移動し、カテゴリタブを見える位置へ追従させる。左右両方向をwidget testで確認
-- 下部の現在地表示「クローゼット」を削除し、全幅の「服を追加」ボタンだけを配置。widget testで旧表示が無いことと追加ボタンがあることを確認
+- 下部バーを削除して一覧の表示領域を拡大し、右下に黒い円形の「＋」追加ボタンを配置。widget testで旧「クローゼット」が無いこと、FABの前景色・背景色を確認
 - `./scripts/check.sh`: pass。Worker typecheck / ESLint、Vitest 54 tests、Flutter format、analyze、Flutter 13 testsがすべて成功
 - Cloudflare deploy: pass（Worker version `6222eaeb-3164-4569-8215-d7859d10c4a3`）
 - デプロイ後 `/health`: HTTP 200 / `{"ok":true}`

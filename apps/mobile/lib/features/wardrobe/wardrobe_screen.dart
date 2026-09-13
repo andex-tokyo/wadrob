@@ -450,19 +450,16 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
             ),
           ],
         ),
-        bottomNavigationBar: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-            child: SizedBox(
-              height: 48,
-              child: FilledButton.icon(
-                key: const ValueKey('add-item-button'),
-                onPressed: addItem,
-                icon: const Icon(Icons.add, size: 20),
-                label: const Text('服を追加'),
-              ),
-            ),
-          ),
+        floatingActionButton: FloatingActionButton(
+          key: const ValueKey('add-item-button'),
+          tooltip: '服を追加',
+          onPressed: addItem,
+          elevation: 2,
+          highlightElevation: 4,
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+          shape: const CircleBorder(),
+          child: const Icon(Icons.add),
         ),
       );
     },
@@ -527,7 +524,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
           key: const PageStorageKey('wardrobe-grid'),
           controller: scroll,
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 88),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: density,
             crossAxisSpacing: 12,
