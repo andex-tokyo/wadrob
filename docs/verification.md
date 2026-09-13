@@ -1,5 +1,13 @@
 # Verification record
 
+## Release APK with latest wardrobe UI (2026-09-14)
+
+- `flutter build apk --release --dart-define=API_BASE_URL=https://wadrob-api.tsuchida.workers.dev --dart-define=GOOGLE_SERVER_CLIENT_ID=...`: pass
+- 生成物: `apps/mobile/build/app/outputs/flutter-apk/app-release.apk`（64,531,028 bytes、2026-09-14 08:44 JST）
+- `scripts/check-release-apk.sh`: pass。`libsqlite3.so` / `libapp.so` / `libflutter.so` を確認し、`libonnxruntime.so` / `libonnxruntime4j_jni.so` は非混入
+- Android SDK `apksigner verify --print-certs`: pass。V2 signer `CN=WDRB, OU=Mobile, O=andex, L=Tokyo, ST=Tokyo, C=JP`、certificate SHA-1 `c845d1556bff6df9689b6ee109e4a862f79f1716`
+- `/Users/yuki/Desktop/WDRB.apk` へコピーし、ビルド出力とのSHA-256一致を確認: `9efb78dc73d53f81079836e28e99a510b88c0b1ae0598da36dbdddf5f82247ee`
+
 ## Category merge and sleeve shortcuts (2026-09-14)
 
 - カテゴリからニットを削除し、既存の `knitwear` itemをトップスへ移すmigration `0004_merge_knitwear.sql` をローカル・本番D1へ適用（各12 commands successful）

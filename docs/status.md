@@ -21,7 +21,7 @@
 | AI | `gpt-5.6-luna`（`OPENAI_API_KEY` 登録済み、`reasoning.effort: none`） |
 | 端末 | Pixel 6a エミュレータ（Android 36.1）、release APK インストール済み・Googleログイン済み |
 | 署名 | **アップロード鍵で署名**（`~/keystores/wadrob-upload.jks`、`apps/mobile/android/key.properties` はgit管理外）。`key.properties` が無い環境はdebug鍵にフォールバック（CI用） |
-| release APK | 2026-09-13 23:59 / 64.5MB（ONNX削除後、静的検査pass） |
+| release APK | 2026-09-14 08:44 / 64.5MB（最新UI、本番API・Googleログイン設定、アップロード鍵署名、静的検査pass）。デスクトップに `WDRB.apk` |
 | release AAB | 2026-09-14 08:07 / 62.9MB・ONNX削除後・アップロード鍵で署名済み |
 | Play Console | アプリ `WDRB` / `tokyo.andex.wadrob` を作成済み（未公開）。「Android デベロッパーの確認」で鍵の登録待ち |
 
@@ -140,6 +140,7 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 
 ## 更新履歴（新しい順）
 
+- 2026-09-14: 最新UIを含む署名済みrelease APKを本番設定で生成。静的検査と署名を確認し、`/Users/yuki/Desktop/WDRB.apk` に配置（64,531,028 bytes、SHA-256 `9efb78dc73d53f81079836e28e99a510b88c0b1ae0598da36dbdddf5f82247ee`）
 - 2026-09-14: 一覧の左右スワイプで前後のカテゴリへ移動し、選択タブも追従する操作を追加。下部バーを廃止して表示領域を広げ、服の追加は右下の黒い円形＋ボタンに変更
 - 2026-09-14: ニットカテゴリをトップスへ統合し、オールインワン・つなぎ・ジャンプスーツ・カバーオールをトップスへ補正。migration `0004_merge_knitwear.sql` をローカル・本番D1へ適用し、トップス/シャツの一覧に「すべて / 半袖 / 長袖 / ノースリーブ / 七分袖」のショートカットを追加。Worker 54 tests / Flutter 13 tests
 - 2026-09-14: OpenAI Responses呼び出しを共通化。短い指数バックオフ、`Retry-After`、quota非再試行、未完了・拒否・不正な構造化出力を処理し、プロンプト注入対策とユーザー単位20回/分の制限を追加。Workerは52 tests
