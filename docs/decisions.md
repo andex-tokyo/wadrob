@@ -7,3 +7,10 @@ Google subを外部Identityとし、RS256 JWKS検証後、aud/iss/exp付きHS256
 リダイレクト毎にURLとDNSの公開アドレスを検証、サイズと時間を制限。Workerの公開ネットワークfetchを利用し、HTTP/HTTPSのみ許可。決定的parserを優先し、不足時にのみResponses Structured Outputsを使用。AIは既存値を上書きしない。
 ## ADR-004: 最小構成
 Riverpodによる依存注入、Dio、Drift、Navigatorによる画面stackを採用。小規模アプリに不要なcode generation/model hierarchyを追加しない。
+
+## ADR-005: カテゴリを実際に着る物に合わせる
+master-prompt §34 のカテゴリ一覧は網羅的だが、オーナー（男性・個人利用）はデニム・セットアップ・バッグ・オールインワン（ワンピースの受け皿）を使わない。使わないカテゴリがナビゲーションとチップに並ぶと、閲覧と登録のどちらも遅くなるため、削除して「スーツ」を追加した。
+
+最終的なカテゴリ: アウター / トップス / シャツ / ニット / パンツ / スーツ / シューズ / アクセサリー / その他。
+
+削除したカテゴリを持つ既存itemは `other` へ寄せてから削除する（migration `0002_category_tuning.sql`）。ワンピース・スカートは追加しない。袖丈（長袖/半袖）はカテゴリと直交する属性なので、カテゴリには混ぜず別軸で扱う方針とする。

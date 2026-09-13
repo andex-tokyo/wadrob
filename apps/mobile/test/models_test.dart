@@ -16,9 +16,9 @@ void main() {
     }),
     WardrobeItem({
       'id': '2',
-      'name': 'デニム',
+      'name': 'スラックス',
       'brand': 'COMOLI',
-      'category': 'denim',
+      'category': 'pants',
       'normalizedColor': 'blue',
       'size': '2',
       'status': 'archived',

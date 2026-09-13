@@ -1,5 +1,15 @@
 # Verification record
 
+## Category tuning (2026-09-13)
+
+オーナーの利用に合わせてカテゴリを調整した（migration `0002_category_tuning.sql`、Worker version `1b01ae0c-7914-4401-9ee6-90ddee624ee2`）。
+
+- 削除: デニム / セットアップ / バッグ / オールインワン（既存itemが持っていた場合は `other` へ寄せてから削除）
+- 追加: スーツ
+- 適用結果（本番D1の `categories` を照会して確認）: アウター / トップス / シャツ / ニット / パンツ / スーツ / シューズ / アクセサリー / その他
+- クライアントのチップとナビは定数マップで同じ並び。AIの抽出・カテゴリ推定の選択肢も同じenumから生成される
+- Worker Vitest 36 tests（`suits` を含み `denim` 等を含まないこと、`suits` を受け付け `denim` を拒否することを追加）
+
 ## Photo-first registration and category inference (2026-09-13)
 
 写真から20秒で登録できるようにするため、エディタを再構成した（Worker version `0f35f936-7e67-4a5b-ad2d-2e712048ac09`）。

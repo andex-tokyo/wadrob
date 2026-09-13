@@ -16,7 +16,7 @@
 | 項目 | 値 |
 | --- | --- |
 | API | `https://wadrob-api.tsuchida.workers.dev` |
-| Worker | `wadrob-api` 最新 version `0f35f936-7e67-4a5b-ad2d-2e712048ac09`（2026-09-13、商品検索とカテゴリ推定APIを追加） |
+| Worker | `wadrob-api` 最新 version `1b01ae0c-7914-4401-9ee6-90ddee624ee2`（2026-09-13、カテゴリ調整を適用） |
 | D1 / R2 | `wadrob-db` / `wadrob-images`（Browser Run binding `BROWSER` あり） |
 | AI | `gpt-5.6-luna`（`OPENAI_API_KEY` 登録済み、`reasoning.effort: none`） |
 | 端末 | Pixel 6a エミュレータ（Android 36.1）、release APK インストール済み・Googleログイン済み |
@@ -136,6 +136,7 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 
 ## 更新履歴（新しい順）
 
+- 2026-09-13: カテゴリを実際に着る物へ調整（デニム・セットアップ・バッグ・オールインワンを削除、スーツを追加）。migration `0002_category_tuning.sql` をローカル・本番D1へ適用。ADR-005に記録
 - 2026-09-13: 写真登録を短縮。エディタを「写真・商品名・カテゴリ・保存」中心に再構成し、詳細は折りたたみ、保存をAppBarにも配置、撮影直後に名前へフォーカス、写真ソースの記憶、保存後の「続けて撮る」を追加。カテゴリは `POST /api/classify` で自動推定し、チップで1タップ修正
 - 2026-09-13: 商品名とブランドから商品候補を探す `POST /api/import/search` を追加（OpenAI web検索、許可ドメイン限定、URLは検索結果のみ）。エディタに「AIで商品を探す」を追加し、候補タップで写真・価格・カテゴリを取り込めるようにした。CIを並列化し、release APK検査はAndroid・依存の変更時のみ実行（8分21秒 → 通常2分台）
 - 2026-09-13: アプリ表示名を WDRB に変更。アイコン（レガシー + アダプティブ）とスプラッシュ（Android 12+ のシステムスプラッシュ含む）を白地・黒文字のワードマークに統一し、書体をログイン画面と同じ Roboto w500 に揃えた。文字の光学中心ズレを修正（スプラッシュ中心 47.6% → 49.9%）

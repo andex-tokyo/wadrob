@@ -4,11 +4,8 @@ const categories = {
   'shirts': 'シャツ',
   'knitwear': 'ニット',
   'pants': 'パンツ',
-  'denim': 'デニム',
-  'setup': 'セットアップ',
-  'all_in_one': 'オールインワン',
+  'suits': 'スーツ',
   'shoes': 'シューズ',
-  'bags': 'バッグ',
   'accessories': 'アクセサリー',
   'other': 'その他',
 };

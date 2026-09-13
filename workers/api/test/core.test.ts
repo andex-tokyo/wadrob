@@ -3,7 +3,7 @@ import { decodeJwt } from 'jose';
 import { issueSession, verifySession } from '../src/auth';
 import { BrowserFetcher, ChainFetcher, SimpleFetcher, validateUrl, zozoYahooMirror, type PageFetcher } from '../src/fetcher';
 import { GenericHtmlParser, GenericJsonLdParser, OpenGraphParser, aiExtract, classifyProduct, decodeHtml, importUrl, mergeFields, searchProducts, tidyLabel } from '../src/import';
-import { itemSchema, type Env } from '../src/model';
+import { categories, itemSchema, type Env } from '../src/model';
 
 describe('URL security', () => {
   it.each(['file:///etc/passwd','http://localhost/x','http://127.0.0.1/x','http://169.254.169.254/latest','ftp://example.com/x'])('rejects %s', (url) => expect(() => validateUrl(url)).toThrow());
@@ -20,6 +20,12 @@ describe('sessions', () => {
 describe('items', () => {
   it('allows name-only items and separates prices', () => { const item=itemSchema.parse({name:'シャツ',listPrice:15400,purchasePrice:2999}); expect(item.listPrice).toBe(15400); expect(item.purchasePrice).toBe(2999); });
   it('rejects negative prices', () => expect(() => itemSchema.parse({name:'服',purchasePrice:-1})).toThrow());
+  it('keeps the category list to what the owner actually wears', () => {
+    expect(categories).toContain('suits');
+    for (const removed of ['denim','setup','bags','all_in_one']) expect(categories).not.toContain(removed);
+    expect(itemSchema.parse({name:'スーツ',category:'suits'}).category).toBe('suits');
+    expect(() => itemSchema.parse({name:'デニム',category:'denim'})).toThrow();
+  });
 });
 
 const aiReply=(product:Record<string,unknown>)=>new Response(JSON.stringify({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify(product)}]}]}));

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-export const categories = ['outerwear','tops','shirts','knitwear','pants','denim','setup','all_in_one','shoes','bags','accessories','other'] as const;
+export const categories = ['outerwear','tops','shirts','knitwear','pants','suits','shoes','accessories','other'] as const;
 export const colors = ['black','gray','white','navy','blue','brown','beige','green','red','purple','yellow','orange','silver','gold','multi','other'] as const;
 const text = z.string().trim().max(500).nullable().optional();
 export const itemSchema = z.object({
