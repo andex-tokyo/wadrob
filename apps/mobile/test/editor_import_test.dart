@@ -74,7 +74,7 @@ void main() {
       '/api/import/url': draftResponse({
         'name': 'コットンニット',
         'brand': 'AURALEE',
-        'category': 'knitwear',
+        'category': 'tops',
         'normalizedColor': 'gray',
         'currency': 'USD',
         'listPrice': 15400,
@@ -109,7 +109,7 @@ void main() {
     expect(find.text('コットンニット'), findsOneWidget);
     // 詳細は既定で畳まれているので開いてから確認する。
     final knit = tester.widget<ChoiceChip>(
-      find.widgetWithText(ChoiceChip, 'ニット'),
+      find.widgetWithText(ChoiceChip, 'トップス'),
     );
     expect(knit.selected, isTrue);
     await tester.tap(find.text('詳細を入力'));

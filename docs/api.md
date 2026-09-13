@@ -24,7 +24,7 @@
 
 - `POST /api/import/url` — `{ "url": "https://shop.example/item" }` → `{ sourceUrl, fields, draft, warnings, duplicate }`。保存しない。
 - `POST /api/import/search` — `{ "name": "ウールコート", "brand": "AURALEE" }` → `{ query, candidates: [{ url, title, shop }] }`。OpenAIのweb検索で商品ページ候補を最大8件返す。URLは推測させず検索結果に出たものだけを返し、ログイン必須のSNS・動画・まとめサイトを `blocked_domains` で除外する。保存しない。
-- `POST /api/classify` — `{ "name": "タートルネック ニット セーター", "brand": "classicalelf" }` → `{ category?, normalizedColor?, sleeve?, subCategory? }`。名前からカテゴリ・検索用カラー・袖丈を推定する。許可値のenumで拘束し、判断できない項目は返さない。保存しない。
+- `POST /api/classify` — `{ "name": "タートルネック ニット セーター", "brand": "classicalelf" }` → `{ category?, normalizedColor?, sleeve?, subCategory? }`。名前からカテゴリ・検索用カラー・袖丈を推定する。許可値のenumで拘束し、判断できない項目は返さない。ニットとオールインワン・つなぎ系は `tops` へ正規化する。保存しない。
 - `POST /api/images` — JPEG/PNG/WebP binary、最大10MB → `{ image }`。
 - `GET /api/images/:id/{original|display|thumbnail}` — 所有者のみ。
 - `POST /api/images/:id/process` — multipartの `display` と `thumbnail`、または `status=processing|failed`。

@@ -2,7 +2,6 @@ const categories = {
   'outerwear': 'アウター',
   'tops': 'トップス',
   'shirts': 'シャツ',
-  'knitwear': 'ニット',
   'pants': 'パンツ',
   'suits': 'スーツ',
   'shoes': 'シューズ',

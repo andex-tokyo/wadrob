@@ -284,6 +284,9 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                       ),
                       onPressed: () {
                         session.browse.category = e.key;
+                        if (!['tops', 'shirts'].contains(e.key)) {
+                          session.browse.sleeve = '';
+                        }
                         changed();
                       },
                       child: Text(
@@ -299,6 +302,42 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                 ],
               ),
             ),
+            if (['tops', 'shirts'].contains(session.browse.category))
+              SizedBox(
+                key: const ValueKey('sleeve-shortcuts'),
+                height: 44,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  itemCount: sleeves.length + 1,
+                  separatorBuilder: (_, _) => const SizedBox(width: 6),
+                  itemBuilder: (_, index) {
+                    final entry = index == 0
+                        ? const MapEntry('', 'すべて')
+                        : sleeves.entries.elementAt(index - 1);
+                    final selected = session.browse.sleeve == entry.key;
+                    return ChoiceChip(
+                      showCheckmark: false,
+                      selected: selected,
+                      selectedColor: Colors.black,
+                      backgroundColor: const Color(0xfff3f2ef),
+                      side: BorderSide.none,
+                      labelStyle: TextStyle(
+                        color: selected ? Colors.white : Colors.black87,
+                        fontSize: 12,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.normal,
+                      ),
+                      label: Text(entry.value),
+                      onSelected: (_) {
+                        session.browse.sleeve = entry.key;
+                        changed();
+                      },
+                    );
+                  },
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Row(

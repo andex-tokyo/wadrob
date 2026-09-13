@@ -16,7 +16,7 @@
 | 項目 | 値 |
 | --- | --- |
 | API | `https://wadrob-api.tsuchida.workers.dev` |
-| Worker | `wadrob-api` 最新 version `0330019e-7671-48c3-9ae2-705dcdd2acca`（2026-09-14、OpenAI堅牢化・rate limit） |
+| Worker | `wadrob-api` 最新 version `6222eaeb-3164-4569-8215-d7859d10c4a3`（2026-09-14、カテゴリ統合・つなぎ系補正） |
 | D1 / R2 | `wadrob-db` / `wadrob-images`（Browser Run `BROWSER`、Rate Limit `AI_RATE_LIMITER` あり） |
 | AI | `gpt-5.6-luna`（`OPENAI_API_KEY` 登録済み、`reasoning.effort: none`） |
 | 端末 | Pixel 6a エミュレータ（Android 36.1）、release APK インストール済み・Googleログイン済み |
@@ -81,7 +81,8 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 - 登録の入口: URL取込に加えて、**商品名とブランドから商品候補を探す**（`POST /api/import/search`）。候補を選ぶと既存の取込経路で写真・価格・カテゴリを取り込む。写真・手動登録でも同じ導線を使える
 - 画像の選択: URL取込で入った複数画像から**メインを選び、不要な画像を外せる**（保存時の順序が `sort_order` / `is_primary` になる）
 - 画像候補: JSON-LD/OGPが1枚しか持たないページでも、DOMと埋め込みデータから商品画像を最大40枚集めて候補にする。商品ID・型番・最頻ファイル名グループで関連商品を除外し、取込直後にモーダルで選択する（既定1枚）
-- 属性: **袖丈**（半袖/長袖/ノースリーブ/七分袖）をカテゴリと直交する軸として保持。フィルタとチップに対応。**サイズは表記ゆれを名寄せ**（M / Ｍ / Mサイズ / メンズM）
+- カテゴリ: ニットをトップスへ統合。オールインワン・つなぎ・ジャンプスーツ・カバーオールもトップスとして扱い、細分類は保持する。本番D1の既存データも移行済み
+- 属性: **袖丈**（半袖/長袖/ノースリーブ/七分袖）をカテゴリと直交する軸として保持。トップス・シャツでは「すべて」を含む5択を一覧から直接切り替えられる。詳細フィルタにも対応。**サイズは表記ゆれを名寄せ**（M / Ｍ / Mサイズ / メンズM）
 - 認証: Google ID token をWorkerでJWKS検証 → 7日JWT発行 → Secure Storage保存 → 再起動時 `GET /api/auth/me`
 - データ: D1をSource of Truth、全クエリを `user_id` でスコープ。Driftのローカルキャッシュ（ユーザー別、logout時に全消去）
 - クローゼット: 2/3/4列グリッド（密度保存）、カテゴリ横スクロール、インライン検索、複合フィルタ、ソート、Pull to Refresh、空状態・エラー時の非破壊表示
@@ -94,8 +95,8 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 
 | 対象 | 現在 | 要件（§82）との差 |
 | --- | --- | --- |
-| Worker（Vitest） | 52 tests | OpenAIの再試行・quota非再試行・未完了・拒否・不正出力、ユーザー別rate limitを追加。認可・所有権、CRUD、Archive、画像メタデータ、処理状態、Google検証、SSRFリダイレクト/DNS再検証のAPI通しテストは未 |
-| Flutter | 12 tests | 認証状態、キャッシュ先行表示、アカウント切替の分離、スクロール復元、ソート、Detail、写真、Archive、画像フォールバックが未（URL取込・商品検索・チップ・サイズ名寄せ・待機表示は追加済み） |
+| Worker（Vitest） | 54 tests | OpenAIの再試行・quota非再試行・未完了・拒否・不正出力、ユーザー別rate limit、旧ニット値とつなぎ系のトップス補正を追加。認可・所有権、CRUD、Archive、画像メタデータ、処理状態、Google検証、SSRFリダイレクト/DNS再検証のAPI通しテストは未 |
+| Flutter | 13 tests | 袖丈ショートカットの全選択肢・トップス/シャツ間の維持・他カテゴリでの解除を追加。認証状態、キャッシュ先行表示、アカウント切替の分離、スクロール復元、ソート、Detail、写真、Archive、画像フォールバックが未 |
 | 端末スモーク（integration_test） | 2 tests | 4:5画像正規化と端末SQLite。debug / profile で実行、releaseは `check-release-apk.sh` でネイティブ依存を静的検査 |
 
 ## テスト体制
@@ -118,7 +119,7 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 2. §82 のFlutterテストを拡充（優先: 認証状態、キャッシュ先行表示、アカウント切替、スクロール復元）
 3. ユーザー側の実機E2Eで手動登録、Logout→再ログイン、写真/カメラ登録、床・木目・カーペット写真の正規化品質を確認する
 4. **Google CloudのOAuthクライアントにアップロード鍵のSHA-1を追加**（Play配信用）→ Play Consoleの「Android デベロッパーの確認」でこの鍵を登録
-5. Wardrobe UIレビュー（§87の品質ゲート／§88の観点）と記録
+5. Wardrobe UIレビュー（トップス/シャツの袖丈ショートカットを含む。§87の品質ゲート／§88の観点）と記録
 6. 小粒: セットアップの `groupId` UI（§35）、Share Intent（§75）、ミラー未掲載ZOZO商品の扱い
 
 ## 既知の制約
@@ -126,7 +127,7 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 - ZOZOTOWN: `zozo.jp` 本体は403。商品IDが同一のYahoo!店へミラーして取得するため、**ミラー未掲載の商品は取り込めない**（Browser Runで描画しても「Access Denied」）
 - 楽天: ページ構造により `listPrice` がnullのことがある
 - andST（dot-st.com）: Product JSON-LDが無く、カラーはページに記載が無いとnull
-- ワンピース・スカートは master-prompt §34 のカテゴリenumに無いため「その他」になる
+- ワンピース・スカートは master-prompt §34 のカテゴリenumに無いため「その他」になる。オールインワン・つなぎ系はトップスになる
 - Browser Runの `quickAction()` はローカル開発では動作しない（デプロイ後のみ）
 
 ## 再発防止メモ
@@ -139,6 +140,7 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 
 ## 更新履歴（新しい順）
 
+- 2026-09-14: ニットカテゴリをトップスへ統合し、オールインワン・つなぎ・ジャンプスーツ・カバーオールをトップスへ補正。migration `0004_merge_knitwear.sql` をローカル・本番D1へ適用し、トップス/シャツの一覧に「すべて / 半袖 / 長袖 / ノースリーブ / 七分袖」のショートカットを追加。Worker 54 tests / Flutter 13 tests
 - 2026-09-14: OpenAI Responses呼び出しを共通化。短い指数バックオフ、`Retry-After`、quota非再試行、未完了・拒否・不正な構造化出力を処理し、プロンプト注入対策とユーザー単位20回/分の制限を追加。Workerは52 tests
 - 2026-09-14: ONNX削除後のrelease AABをアップロード鍵で再生成（62.9MB）。署名fingerprint、必須ネイティブライブラリ、ONNX非混入を確認
 - 2026-09-14: ルート直下の検証スクリーンショットをgit追跡対象から外し、今後の `wadrob-*.png` をignore。背景除去廃止・画像候補40枚・検証状況について文書間の不整合を修正

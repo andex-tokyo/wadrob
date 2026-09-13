@@ -1,5 +1,18 @@
 # Verification record
 
+## Category merge and sleeve shortcuts (2026-09-14)
+
+- カテゴリからニットを削除し、既存の `knitwear` itemをトップスへ移すmigration `0004_merge_knitwear.sql` をローカル・本番D1へ適用（各12 commands successful）
+- 本番D1のカテゴリを照会し、8件になったことを確認: アウター / トップス / シャツ / パンツ / スーツ / シューズ / アクセサリー / その他
+- 本番D1のitem件数: accessories 7 / other 2 / outerwear 2 / pants 9 / shirts 14 / shoes 2 / tops 4
+- その他にあったHAREの「オールインワン イソザイキリカエオールインワン(HARE) メンズ」が `tops` に移り、`sub_category` は「オールインワン・サロペット > つなぎ/オールインワン」のまま保持されたことを確認
+- 新規保存・URL取込・AI分類でも、旧 `knitwear` とオールインワン / つなぎ / ジャンプスーツ / カバーオールをトップスへ正規化する
+- トップスとシャツの一覧に「すべて / 半袖 / 長袖 / ノースリーブ / 七分袖」を追加。両カテゴリ間では選択を維持し、他カテゴリへ移ると解除するwidget testを追加
+- `./scripts/check.sh`: pass。Worker typecheck / ESLint、Vitest 54 tests、Flutter format、analyze、Flutter 13 testsがすべて成功
+- Cloudflare deploy: pass（Worker version `6222eaeb-3164-4569-8215-d7859d10c4a3`）
+- デプロイ後 `/health`: HTTP 200 / `{"ok":true}`
+- 端末UIでの見た目と操作はユーザー側の実機E2E待ち
+
 ## OpenAI integration hardening and repository cleanup (2026-09-14)
 
 - OpenAI Responsesの呼び出しを `src/openai.ts` に共通化。一時的なネットワーク障害とHTTP `408` / `409` / `429` / `5xx` は最大3回、合計4秒以内で指数バックオフし、範囲内の `Retry-After` を優先する

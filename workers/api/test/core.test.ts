@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { issueSession, verifySession } from '../src/auth';
 import { BrowserFetcher, ChainFetcher, SimpleFetcher, validateUrl, zozoYahooMirror, type PageFetcher } from '../src/fetcher';
 import { GenericHtmlParser, GenericJsonLdParser, OpenGraphParser, aiExtract, classifyProduct, collectPageImages, decodeHtml, dedupeImages, importUrl, mergeFields, searchProducts, tidyLabel } from '../src/import';
-import { categories, itemSchema, sleeves, type Env } from '../src/model';
+import { categories, itemSchema, normalizeCategory, sleeves, type Env } from '../src/model';
 import { OpenAIRequestError, requestStructured } from '../src/openai';
 import { enforceAiRateLimit } from '../src/index';
 
@@ -25,9 +25,15 @@ describe('items', () => {
   it('rejects negative prices', () => expect(() => itemSchema.parse({name:'服',purchasePrice:-1})).toThrow());
   it('keeps the category list to what the owner actually wears', () => {
     expect(categories).toContain('suits');
-    for (const removed of ['denim','setup','bags','all_in_one']) expect(categories).not.toContain(removed);
+    for (const removed of ['denim','setup','bags','all_in_one','knitwear']) expect(categories).not.toContain(removed);
     expect(itemSchema.parse({name:'スーツ',category:'suits'}).category).toBe('suits');
+    expect(itemSchema.parse({name:'ニット',category:'knitwear'}).category).toBe('tops');
+    expect(itemSchema.parse({name:'オールインワン',category:'other'}).category).toBe('tops');
     expect(() => itemSchema.parse({name:'デニム',category:'denim'})).toThrow();
+  });
+  it('maps one-piece utility garments to tops', () => {
+    for(const name of ['つなぎ','ジャンプスーツ','カバーオール','ALL-IN-ONE'])expect(normalizeCategory(name,'other')).toBe('tops');
+    expect(normalizeCategory('トートバッグ','other')).toBe('other');
   });
   it('accepts a sleeve length and nothing else', () => {
     expect(sleeves).toEqual(['short','long','sleeveless','three_quarter']);
@@ -37,7 +43,7 @@ describe('items', () => {
 });
 
 const aiReply=(product:Record<string,unknown>)=>new Response(JSON.stringify({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify(product)}]}]}));
-const aiProduct={name:null,brand:null,category:'knitwear',subCategory:null,originalColor:null,normalizedColor:'gray',sleeve:null,listPrice:null,currency:null,productCode:null,shopName:null};
+const aiProduct={name:null,brand:null,category:'tops',subCategory:null,originalColor:null,normalizedColor:'gray',sleeve:null,listPrice:null,currency:null,productCode:null,shopName:null};
 const env=(extra:Partial<Env>={})=>({OPENAI_API_KEY:'test-key',OPENAI_MODEL:'gpt-5.6-luna',...extra}) as Env;
 const htmlFetcher=(html:string):PageFetcher=>({get:async()=>({bytes:new TextEncoder().encode(html),url:'https://shop.example/item',type:'text/html'})});
 const jsonLd=`<script type="application/ld+json">{"@type":"Product","name":"コットンニット","brand":{"name":"AURALEE"},"offers":{"price":"15400","priceCurrency":"JPY"}}</script>`;
@@ -88,7 +94,7 @@ describe('AI rate limit', () => {
 describe('AI assisted import', () => {
   it('maps structured output to owned fields', async () => {
     const fields=await aiExtract('page text',env(),async()=>aiReply(aiProduct));
-    expect(fields.category).toEqual({value:'knitwear',source:'ai',confidence:.5});
+    expect(fields.category).toEqual({value:'tops',source:'ai',confidence:.5});
     expect(fields.normalizedColor?.value).toBe('gray');
   });
   it('drops unknown enum values without losing the rest', async () => {
@@ -137,7 +143,7 @@ describe('AI fallback triggering', () => {
     vi.stubGlobal('fetch',calls);
     const result=await importUrl('https://shop.example/item',env(),htmlFetcher(`<html><body>${jsonLd}</body></html>`));
     expect(calls).toHaveBeenCalledTimes(1);
-    expect(result.draft.category).toBe('knitwear');
+    expect(result.draft.category).toBe('tops');
     expect(result.draft.normalizedColor).toBe('gray');
     expect(result.draft.name).toBe('コットンニット');
     expect(result.draft.brand).toBe('AURALEE');
@@ -180,8 +186,12 @@ const classifyReply=(data:unknown)=>new Response(JSON.stringify({status:'complet
 
 describe('classification', () => {
   it('returns the inferred category and color', async () => {
-    const result=await classifyProduct('タートルネック ニット セーター','classicalelf',env(),async()=>classifyReply({category:'knitwear',normalizedColor:'gray',sleeve:'long',subCategory:'タートルネック'}));
-    expect(result).toEqual({category:'knitwear',normalizedColor:'gray',sleeve:'long',subCategory:'タートルネック'});
+    const result=await classifyProduct('タートルネック ニット セーター','classicalelf',env(),async()=>classifyReply({category:'tops',normalizedColor:'gray',sleeve:'long',subCategory:'タートルネック'}));
+    expect(result).toEqual({category:'tops',normalizedColor:'gray',sleeve:'long',subCategory:'タートルネック'});
+  });
+  it('forces an all-in-one into tops even when AI returns other', async () => {
+    const result=await classifyProduct('オールインワン インザリカエオール','HARE',env(),async()=>classifyReply({category:'other',normalizedColor:'black',sleeve:'short',subCategory:'オールインワン'}));
+    expect(result.category).toBe('tops');
   });
   it('drops an unknown category but keeps the color', async () => {
     const result=await classifyProduct('謎の服',undefined,env(),async()=>classifyReply({category:'camisole',normalizedColor:'black',sleeve:'puff',subCategory:null}));
