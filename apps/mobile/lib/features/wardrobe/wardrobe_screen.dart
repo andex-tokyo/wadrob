@@ -15,7 +15,11 @@ class WardrobeScreen extends StatefulWidget {
 class _WardrobeScreenState extends State<WardrobeScreen> {
   final scroll = ScrollController();
   final search = TextEditingController();
+  late final categoryKeys = <String, GlobalKey>{
+    for (final value in ['', ...categories.keys]) value: GlobalKey(),
+  };
   bool searching = false;
+  double categoryDragDistance = 0;
   Session get session => widget.session;
   @override
   void dispose() {
@@ -27,6 +31,40 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
   void changed() {
     session.persistBrowse();
     setState(() {});
+  }
+
+  void selectCategory(String value) {
+    session.browse.category = value;
+    if (!['tops', 'shirts'].contains(value)) session.browse.sleeve = '';
+    changed();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final tabContext = categoryKeys[value]?.currentContext;
+      if (tabContext != null) {
+        Scrollable.ensureVisible(
+          tabContext,
+          alignment: .5,
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+        );
+      }
+      if (scroll.hasClients) scroll.jumpTo(0);
+    });
+  }
+
+  void swipeCategory(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+    final distance = categoryDragDistance;
+    categoryDragDistance = 0;
+    if (distance.abs() < 48 && velocity.abs() < 150) return;
+    final values = ['', ...categories.keys];
+    final current = values.indexOf(session.browse.category);
+    final movesForward = distance.abs() >= 48 ? distance < 0 : velocity < 0;
+    final next = (current + (movesForward ? 1 : -1)).clamp(
+      0,
+      values.length - 1,
+    );
+    if (next != current) selectCategory(values[next]);
   }
 
   Future<void> addItem({String? mode}) async {
@@ -277,18 +315,13 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                 children: [
                   for (final e in {'': 'すべて', ...categories}.entries)
                     TextButton(
+                      key: categoryKeys[e.key],
                       style: TextButton.styleFrom(
                         foregroundColor: session.browse.category == e.key
                             ? Colors.black
                             : Colors.grey,
                       ),
-                      onPressed: () {
-                        session.browse.category = e.key;
-                        if (!['tops', 'shirts'].contains(e.key)) {
-                          session.browse.sleeve = '';
-                        }
-                        changed();
-                      },
+                      onPressed: () => selectCategory(e.key),
                       child: Text(
                         e.value,
                         style: TextStyle(
@@ -401,34 +434,32 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                 ),
               ),
             Expanded(
-              child: RefreshIndicator(
-                onRefresh: session.sync,
-                child: _content(items, density),
+              child: GestureDetector(
+                key: const ValueKey('category-swipe-area'),
+                behavior: HitTestBehavior.opaque,
+                onHorizontalDragStart: (_) => categoryDragDistance = 0,
+                onHorizontalDragUpdate: (details) =>
+                    categoryDragDistance += details.primaryDelta ?? 0,
+                onHorizontalDragEnd: swipeCategory,
+                onHorizontalDragCancel: () => categoryDragDistance = 0,
+                child: RefreshIndicator(
+                  onRefresh: session.sync,
+                  child: _content(items, density),
+                ),
               ),
             ),
           ],
         ),
         bottomNavigationBar: SafeArea(
-          child: SizedBox(
-            height: 60,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.checkroom_outlined, size: 20),
-                      SizedBox(width: 10),
-                      Text('クローゼット', style: TextStyle(fontSize: 12)),
-                    ],
-                  ),
-                  TextButton.icon(
-                    onPressed: addItem,
-                    icon: const Icon(Icons.add, size: 20),
-                    label: const Text('服を追加', style: TextStyle(fontSize: 12)),
-                  ),
-                ],
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+            child: SizedBox(
+              height: 48,
+              child: FilledButton.icon(
+                key: const ValueKey('add-item-button'),
+                onPressed: addItem,
+                icon: const Icon(Icons.add, size: 20),
+                label: const Text('服を追加'),
               ),
             ),
           ),

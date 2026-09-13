@@ -52,5 +52,22 @@ void main() {
     await tester.pump();
     expect(session.browse.sleeve, isEmpty);
     expect(shortcuts, findsNothing);
+
+    await tester.drag(
+      find.byKey(const ValueKey('category-swipe-area')),
+      const Offset(-500, 0),
+    );
+    await tester.pumpAndSettle();
+    expect(session.browse.category, 'suits');
+
+    await tester.drag(
+      find.byKey(const ValueKey('category-swipe-area')),
+      const Offset(500, 0),
+    );
+    await tester.pumpAndSettle();
+    expect(session.browse.category, 'pants');
+
+    expect(find.text('クローゼット'), findsNothing);
+    expect(find.byKey(const ValueKey('add-item-button')), findsOneWidget);
   });
 }
