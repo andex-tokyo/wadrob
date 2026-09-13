@@ -4,6 +4,7 @@ node_modules/
 .env
 *.jks
 *.keystore
+key.properties
 .DS_Store
 coverage/
 wadrob-emulator.png

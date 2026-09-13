@@ -20,8 +20,10 @@
 | D1 / R2 | `wadrob-db` / `wadrob-images`（Browser Run binding `BROWSER` あり） |
 | AI | `gpt-5.6-luna`（`OPENAI_API_KEY` 登録済み、`reasoning.effort: none`） |
 | 端末 | Pixel 6a エミュレータ（Android 36.1）、release APK インストール済み・Googleログイン済み |
-| release APK | 2026-09-13 20:55 / 124.8MB / SHA-256 `08a40dc5…` |
-| release AAB | 2026-09-13 18:06 のままで**アプリ変更後に未再生成** |
+| 署名 | **アップロード鍵で署名**（`~/keystores/wadrob-upload.jks`、`apps/mobile/android/key.properties` はgit管理外）。`key.properties` が無い環境はdebug鍵にフォールバック（CI用） |
+| release APK | 2026-09-13 23:03 / 125.4MB |
+| release AAB | 2026-09-13 23:02 / 95.2MB・アップロード鍵で署名済み |
+| Play Console | アプリ `WDRB` / `tokyo.andex.wadrob` を作成済み（未公開）。「Android デベロッパーの確認」で鍵の登録待ち |
 
 ## 検証コマンド
 
@@ -115,7 +117,7 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 3. 画像の背景除去・正規化の品質確認（白背景以外の床・木目・カーペットなど代表写真）
 4. 実HTTPの通しテストをローカルWorker（`wrangler dev` + 発行したJWT）で整備し、API層を端末なしで検証できるようにする
 5. §82 のテスト拡充（優先: 認可/所有権 → CRUD/Archive → 認証状態とキャッシュ系）
-6. release署名。`apps/mobile/android/app/build.gradle.kts` の TODO、Google Cloudへrelease SHA-1登録、AAB再生成
+6. release署名は完了。**Google CloudのOAuthクライアントにアップロード鍵のSHA-1を追加**（Play配信用）→ Play Consoleの「Android デベロッパーの確認」でこの鍵を登録
 7. Wardrobe UIレビュー（§87の品質ゲート／§88の観点）と記録
 8. 小粒: セットアップの `groupId` UI（§35）、Share Intent（§75）、ミラー未掲載ZOZO商品の扱い
 
@@ -137,6 +139,7 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 
 ## 更新履歴（新しい順）
 
+- 2026-09-13: 配布用のアップロード鍵を作成し、releaseビルドに設定（`key.properties` はgit管理外）。AAB/APKを同鍵で再生成。Play Consoleの開発者確認に登録するSHA-1/SHA-256と公開鍵（.pem）を用意
 - 2026-09-13: 袖丈（半袖/長袖/ノースリーブ/七分袖）を属性として追加（migration `0003_sleeve.sql`、可視チップ＋AI推定＋フィルタ）。サイズの表記ゆれを名寄せ（M/Ｍ/Mサイズ/メンズM）。master-prompt を改訂し、カテゴリ・袖丈・フィルタ・groupIdの記述を実装に合わせた
 - 2026-09-13: カテゴリを実際に着る物へ調整（デニム・セットアップ・バッグ・オールインワンを削除、スーツを追加）。migration `0002_category_tuning.sql` をローカル・本番D1へ適用。ADR-005に記録
 - 2026-09-13: 写真登録を短縮。エディタを「写真・商品名・カテゴリ・保存」中心に再構成し、詳細は折りたたみ、保存をAppBarにも配置、撮影直後に名前へフォーカス、写真ソースの記憶、保存後の「続けて撮る」を追加。カテゴリは `POST /api/classify` で自動推定し、チップで1タップ修正

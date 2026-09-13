@@ -1,5 +1,20 @@
 # Verification record
 
+## Release signing (2026-09-13)
+
+配布用のアップロード鍵を作成し、releaseビルドをこの鍵で署名するようにした。
+
+- 鍵: `/Users/yuki/keystores/wadrob-upload.jks`（alias `wadrob-upload`、RSA 4096、有効期限 2054-01-29）
+- 公開鍵: `/Users/yuki/keystores/wadrob-upload.pem`（Android デベロッパーの確認に使う）
+- SHA-1: `C8:45:D1:55:6B:FF:6D:F9:68:9B:6E:E1:09:E4:A8:62:F7:9F:17:16`
+- SHA-256: `24:8E:61:F7:B4:DD:92:92:CB:49:19:57:A5:1E:78:54:F4:99:A1:5E:81:E3:49:3F:4A:A4:6C:BB:60:CF:6F:AE`
+- `apps/mobile/android/key.properties` にGradle用の設定を置き、`.gitignore` と `apps/mobile/android/.gitignore` の両方で除外（リポジトリには鍵もパスワードも入らない）
+- `build.gradle.kts` は `key.properties` があればそれを使い、無い環境（CI）はdebug鍵にフォールバックする
+- AAB/APKを再生成し、`keytool -printcert` でAABの署名が上記SHA-1と一致することを確認（AAB 95.2MB / APK 125.4MB）
+- `scripts/check-release-apk.sh` は新しい鍵でもpass（R8のkeepルールは維持）
+
+未対応: Google CloudのOAuth AndroidクライアントへのSHA-1追加（配布ビルドでGoogleサインインを有効にするため）と、Play Console「Android デベロッパーの確認」での鍵登録。
+
 ## Sleeve attribute and size normalisation (2026-09-13)
 
 - `wardrobe_items.sleeve` を追加（migration `0003_sleeve.sql`、ローカル・本番D1へ適用済み、`user_id/sleeve` に索引）
