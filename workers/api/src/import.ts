@@ -44,7 +44,7 @@ export function mergeFields(...sources:Fields[]):Fields{const merged:Fields={};f
 
 // 商品ページのDOMから商品画像を集める。JSON-LDやOGPは1枚しか持たないことが多く、
 // 実際にはギャラリーに複数枚あるため、選択肢を広げるために使う。
-export function collectPageImages(html:string,pageUrl:string,limit=12):string[]{
+export function collectPageImages(html:string,pageUrl:string,limit=40,known:string[]=[]):string[]{
  const {document}=parseHTML(html);const raw:string[]=[];
  for(const img of Array.from(document.querySelectorAll('img'))){
   for(const attr of ['src','data-src','data-original','data-lazy-src','data-echo']){
@@ -64,7 +64,7 @@ export function collectPageImages(html:string,pageUrl:string,limit=12):string[]{
   const path=url.pathname.toLowerCase();
   if(!/\.(jpe?g|png|webp)$/.test(path))continue;
   // 装飾・UI・プレースホルダを除外
-  if(/(sprite|logo|icon|banner|bnr|btn|blank|spacer|pixel|loading|noimage|common\/|designassets\/|elements\/|symbols\/|\/assets\/)/.test(path))continue;
+  if(/(sprite|logo|icon|banner|bnr|btn|blank|spacer|pixel|loading|noimage|common\/|designassets\/|elements\/|symbols\/|\/assets\/|\/static\/|chip|wash|sizechart|size_chart|top_ttl|staff_styling)/.test(path))continue;
   // ショップの静的アセット配信ホスト（商品画像CDNとは別）
   if(['s.yimg.jp','s.yimg.com'].includes(url.hostname.toLowerCase()))continue;
   // 極端に小さいサムネイル表記を除外（_50.jpg, _100.jpg, _thumb.jpg 等）
@@ -74,7 +74,28 @@ export function collectPageImages(html:string,pageUrl:string,limit=12):string[]{
   if(seen.has(key))continue;
   seen.add(key);
   out.push(url.toString());
-  if(out.length>=limit)break;
+  // 関連商品やナビの画像が大量に並ぶページがあるため、収集自体は広く行い、
+  // 後段で商品IDによる絞り込みと上限適用を行う。
+  if(out.length>=500)break;
+ }
+ // 商品IDなどのトークンがURLに含まれる画像を優先する。
+ // 関連商品やナビゲーションの画像が大量に混ざるページ（UNIQLO等）対策。
+ const tokens=new Set<string>();
+ for(const source of [pageUrl,...known])for(const found of source.matchAll(/\d{4,}/g))tokens.add(found[0]);
+ const matches=out.filter(url=>[...tokens].some(token=>url.includes(token)));
+ const ordered=matches.length>=5?matches:out;
+ return ordered.slice(0,limit);
+}
+
+// 同じ画像の別クエリ（?width=600 等）を1つにまとめる。
+export function dedupeImages(urls:string[]):string[]{
+ const seen=new Set<string>(),out:string[]=[];
+ for(const value of urls){
+  let url:URL;try{url=new URL(value);}catch{continue;}
+  const key=url.host+url.pathname;
+  if(seen.has(key))continue;
+  seen.add(key);
+  out.push(url.toString());
  }
  return out;
 }
@@ -132,14 +153,14 @@ export async function importUrl(url:string,env:Env,fetcher:PageFetcher=new Simpl
   let page=await fetcher.get(sourceUrl,'html');
   let html=decodeHtml(page.bytes,page.charset);
   let parsed=mergeFields(new GenericJsonLdParser().parse(html),new OpenGraphParser().parse(html),new GenericHtmlParser().parse(html));
-  let pageImages=collectPageImages(html,page.url);
+  let pageImages=collectPageImages(html,page.url,40,(parsed.imageUrls?.value as string[]|undefined)??[]);
   // JS描画のページやbot対策で内容が薄いときは、描画して取り直す。
   if(renderer&&(parsed.name===undefined||pageImages.length<2)){
    try{
     const rendered=await renderer.get(page.url,'html');
     const renderedHtml=decodeHtml(rendered.bytes,rendered.charset);
     const renderedParsed=mergeFields(new GenericJsonLdParser().parse(renderedHtml),new OpenGraphParser().parse(renderedHtml),new GenericHtmlParser().parse(renderedHtml));
-    const renderedImages=collectPageImages(renderedHtml,rendered.url);
+    const renderedImages=collectPageImages(renderedHtml,rendered.url,40,(renderedParsed.imageUrls?.value as string[]|undefined)??[]);
     const score=(source:Fields,images:string[])=>(source.name?1:0)+(source.brand?1:0)+(source.listPrice?1:0)+Math.min(images.length,3);
     if(score(renderedParsed,renderedImages)>score(parsed,pageImages)){
      page=rendered;html=renderedHtml;parsed=renderedParsed;pageImages=renderedImages;
@@ -150,7 +171,7 @@ export async function importUrl(url:string,env:Env,fetcher:PageFetcher=new Simpl
   // JSON-LD/OGPの画像を先頭に、ページ内の商品画像を足して選択肢を広げる。
   if(pageImages.length){
    const existing=(fields.imageUrls?.value as string[]|undefined)??[];
-   const merged=[...existing,...pageImages].filter((url,index,all)=>all.indexOf(url)===index).slice(0,12);
+   const merged=dedupeImages([...existing,...pageImages]).slice(0,40);
    fields.imageUrls={value:merged,source:fields.imageUrls?.source??'html',confidence:fields.imageUrls?.confidence??.6};
   }
   if(env.OPENAI_API_KEY&&Object.keys(aiProperties).some(k=>fields[k]===undefined)){try{const {document}=parseHTML(html);document.querySelectorAll('script,style,nav,footer').forEach(x=>x.remove());fields=mergeFields(fields,await aiExtract(document.body?.textContent??'',env));}catch(error){console.warn('import ai failed',reason(error));warnings.push('補助解析を利用できませんでした');}}

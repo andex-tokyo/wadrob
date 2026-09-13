@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { decodeJwt } from 'jose';
 import { issueSession, verifySession } from '../src/auth';
 import { BrowserFetcher, ChainFetcher, SimpleFetcher, validateUrl, zozoYahooMirror, type PageFetcher } from '../src/fetcher';
-import { GenericHtmlParser, GenericJsonLdParser, OpenGraphParser, aiExtract, classifyProduct, collectPageImages, decodeHtml, importUrl, mergeFields, searchProducts, tidyLabel } from '../src/import';
+import { GenericHtmlParser, GenericJsonLdParser, OpenGraphParser, aiExtract, classifyProduct, collectPageImages, decodeHtml, dedupeImages, importUrl, mergeFields, searchProducts, tidyLabel } from '../src/import';
 import { categories, itemSchema, sleeves, type Env } from '../src/model';
 
 describe('URL security', () => {
@@ -186,9 +186,9 @@ describe('gallery images', () => {
   });
   it('caps the number of candidates', () => {
     const html = page(
-      Array.from({ length: 20 }, (_, n) => `<img src="https://cdn.example/p${n}_500.jpg">`).join(''),
+      Array.from({ length: 60 }, (_, n) => `<img src="https://cdn.example/p${n}_500.jpg">`).join(''),
     );
-    expect(collectPageImages(html, 'https://shop.example/item').length).toBe(12);
+    expect(collectPageImages(html, 'https://shop.example/item').length).toBe(40);
   });
   it('finds gallery URLs embedded in scripts as relative paths', () => {
     const html = page(
@@ -199,6 +199,28 @@ describe('gallery images', () => {
       'https://item.example/img/932/item_2.jpg',
       'https://item.example/img/932/item_3.jpg',
     ]);
+  });
+  it('prefers images sharing the product id over related products', () => {
+    const related = Array.from(
+      { length: 5 },
+      (_, n) => `<img src="https://cdn.example/navi/related_${n}_500.jpg">`,
+    ).join('');
+    const own = Array.from(
+      { length: 6 },
+      (_, n) => `<img src="https://cdn.example/goods/item_123456_${n}.jpg">`,
+    ).join('');
+    const images = collectPageImages(page(related + own), 'https://shop.example/item/123456/');
+    expect(images).toHaveLength(6);
+    expect(images.every((url) => url.includes('123456'))).toBe(true);
+  });
+  it('merges the same image with a different query string', () => {
+    expect(
+      dedupeImages([
+        'https://cdn.example/a_500.jpg',
+        'https://cdn.example/a_500.jpg?width=600',
+        'https://cdn.example/b_500.jpg',
+      ]),
+    ).toEqual(['https://cdn.example/a_500.jpg', 'https://cdn.example/b_500.jpg']);
   });
 });
 
