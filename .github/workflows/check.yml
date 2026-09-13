@@ -2,12 +2,19 @@ name: check
 
 on:
   push:
+    branches: [master]
   pull_request:
   workflow_dispatch:
 
+# 同じブランチで新しいpushが来たら古い実行は打ち切る。
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  fast:
-    name: fast checks (worker + flutter)
+  # Worker とアプリは独立なので並列に回す（直列だと待ち時間が足し算になる）。
+  worker:
+    name: worker (typecheck / lint / test)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,21 +23,46 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: workers/api/package-lock.json
+      - run: npm ci
+        working-directory: workers/api
+      - run: ./scripts/check.sh worker
+
+  app:
+    name: app (format / analyze / test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.44.0'
           channel: stable
           cache: true
-      - name: install worker dependencies
-        run: npm ci
-        working-directory: workers/api
-      - name: run checks
-        run: ./scripts/check.sh
+      - run: ./scripts/check.sh app
+
+  # release APK のR8検査はAndroid側や依存が変わったときだけ実行する。
+  # 毎回ビルドするとGradleのダウンロードで数分かかるため。
+  changes:
+    name: detect android changes
+    runs-on: ubuntu-latest
+    outputs:
+      android: ${{ steps.filter.outputs.android }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            android:
+              - 'apps/mobile/android/**'
+              - 'apps/mobile/pubspec.yaml'
+              - 'apps/mobile/pubspec.lock'
+              - 'scripts/check-release-apk.sh'
 
   release-apk:
     name: release APK static check (JNI classes survive R8)
     runs-on: ubuntu-latest
-    needs: fast
+    needs: changes
+    if: needs.changes.outputs.android == 'true' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -42,6 +74,13 @@ jobs:
           flutter-version: '3.44.0'
           channel: stable
           cache: true
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('apps/mobile/android/**/*.gradle*', 'apps/mobile/pubspec.lock') }}
+          restore-keys: gradle-${{ runner.os }}-
       - name: build release APK
         run: flutter build apk --release
         working-directory: apps/mobile

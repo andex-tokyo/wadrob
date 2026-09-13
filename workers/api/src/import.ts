@@ -102,3 +102,35 @@ export async function importUrl(url:string,env:Env,fetcher:PageFetcher=new Simpl
  return {sourceUrl,fields,draft:{...Object.fromEntries(Object.entries(fields).map(([k,v])=>[k,v.value])),sourceUrl,purchasePrice:null,purchasedAt:null,size:null},warnings};
 }
 export function reason(error:unknown){return error instanceof ApiError?`${error.code}:${error.message}`:`${(error as Error)?.name??'Error'}:${(error as Error)?.message??String(error)}`;}
+
+// 名前とブランドから商品ページを探す。URLを推測させず、検索結果に出たURLだけを返す。
+// 取得できることを確認済みのショップに限定して、候補が取り込み可能であるようにする。
+export const searchDomains=['zozo.jp','store.shopping.yahoo.co.jp','item.rakuten.co.jp','www.dot-st.com','www.uniqlo.com','www.gu-global.com'];
+const searchSchema=z.object({candidates:z.array(z.object({url:z.string(),title:z.string().nullable(),shop:z.string().nullable()})).max(8)}).strict();
+export async function searchProducts(name:string,brand:string|undefined,env:Env,request:typeof fetch=fetch){
+ if(!env.OPENAI_API_KEY)throw new ApiError('AUTH_CONFIG','商品検索が設定されていません',503);
+ const payload={
+  model:env.OPENAI_MODEL||'gpt-5.6-luna',store:false,reasoning:{effort:'none'},
+  tools:[{type:'web_search',filters:{allowed_domains:searchDomains}}],tool_choice:'auto',
+  instructions:'Find product detail pages for the given garment. Only return URLs that appear in the search results; never invent, complete or guess a URL. Prefer Japanese fashion e-commerce product pages.',
+  input:`商品名: ${name}\nブランド: ${brand||'不明'}\nこの商品の商品詳細ページを最大5件探してください。`,
+  max_output_tokens:1500,
+  text:{format:{type:'json_schema',name:'candidates',strict:true,schema:{type:'object',properties:{candidates:{type:'array',items:{type:'object',properties:{url:{type:'string'},title:{type:['string','null']},shop:{type:['string','null']}},required:['url','title','shop'],additionalProperties:false}}},required:['candidates'],additionalProperties:false}}},
+ };
+ const r=await request('https://api.openai.com/v1/responses',{method:'POST',signal:AbortSignal.timeout(30000),headers:{Authorization:`Bearer ${env.OPENAI_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify(payload)});
+ if(!r.ok)throw new ApiError('SEARCH_FAILED','商品を検索できませんでした',502);
+ const result=await r.json() as any;
+ if(result.status!=='completed')throw new ApiError('SEARCH_FAILED','商品を検索できませんでした',502);
+ const output=result.output?.flatMap((x:any)=>x.content??[]).filter((x:any)=>x.type==='output_text').map((x:any)=>x.text).join('');
+ const parsed=searchSchema.safeParse(JSON.parse(output||'{}'));
+ if(!parsed.success)return {query:[brand,name].filter(Boolean).join(' '),candidates:[]};
+ const seen=new Set<string>(),candidates:{url:string;title?:string;shop?:string}[]=[];
+ for(const candidate of parsed.data.candidates){
+  let url:string;try{url=validateUrl(candidate.url).href;}catch{continue;}
+  if(seen.has(url))continue;
+  seen.add(url);
+  candidates.push({url,...(candidate.title?{title:candidate.title}:{}),...(candidate.shop?{shop:candidate.shop}:{})});
+  if(candidates.length>=5)break;
+ }
+ return {query:[brand,name].filter(Boolean).join(' '),candidates};
+}

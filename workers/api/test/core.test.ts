@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { decodeJwt } from 'jose';
 import { issueSession, verifySession } from '../src/auth';
 import { BrowserFetcher, ChainFetcher, SimpleFetcher, validateUrl, zozoYahooMirror, type PageFetcher } from '../src/fetcher';
-import { GenericHtmlParser, GenericJsonLdParser, OpenGraphParser, aiExtract, decodeHtml, importUrl, mergeFields, tidyLabel } from '../src/import';
+import { GenericHtmlParser, GenericJsonLdParser, OpenGraphParser, aiExtract, decodeHtml, importUrl, mergeFields, searchProducts, tidyLabel } from '../src/import';
 import { itemSchema, type Env } from '../src/model';
 
 describe('URL security', () => {
@@ -77,6 +77,27 @@ describe('AI fallback triggering', () => {
     expect(calls).not.toHaveBeenCalled();
     expect(result.draft.category).toBeUndefined();
     expect(result.draft.name).toBe('コットンニット');
+  });
+});
+
+const searchReply=(candidates:unknown[])=>new Response(JSON.stringify({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({candidates})}]}]}));
+
+describe('product search', () => {
+  it('validates and de-duplicates candidate URLs', async () => {
+    const result=await searchProducts('ニット','AURALEE',env(),async()=>searchReply([
+      {url:'https://zozo.jp/shop/a/goods/1/',title:'ニット',shop:'ZOZOTOWN'},
+      {url:'https://zozo.jp/shop/a/goods/1/#color',title:'同じ商品',shop:'ZOZOTOWN'},
+      {url:'http://127.0.0.1/secret',title:'社内',shop:'x'},
+      {url:'ちがう文字列',title:'壊れたURL',shop:'x'},
+    ]));
+    expect(result.candidates.map(c=>c.url)).toEqual(['https://zozo.jp/shop/a/goods/1/']);
+    expect(result.query).toBe('AURALEE ニット');
+  });
+  it('reports a missing API key', async () => {
+    await expect(searchProducts('ニット',undefined,env({OPENAI_API_KEY:undefined}),async()=>searchReply([]))).rejects.toThrow();
+  });
+  it('reports search failures', async () => {
+    await expect(searchProducts('ニット',undefined,env(),async()=>new Response('nope',{status:429}))).rejects.toThrow();
   });
 });
 

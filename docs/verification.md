@@ -1,5 +1,26 @@
 # Verification record
 
+## Product search by name and brand (2026-09-13)
+
+写真・手動登録を楽にするため、商品名とブランドから商品ページ候補を探す `POST /api/import/search` を追加した（Worker version `5949c6b3-09f8-49bd-a928-3e36db7084ff`）。
+
+- 実APIでの確認（`gpt-5.6-luna` + `web_search`）:
+  - `ユニクロ エアリズムコットンオーバーサイズTシャツ` → 3件（Yahoo!ショッピング2、楽天1）／5.3秒
+  - `PUBLIC TOKYO メッシュボーダーニット` → 1件（`https://store.shopping.yahoo.co.jp/zozo/82019293.html`）／5.9秒。これは先にZOZO取込で使った商品と同一で、候補から既存の取込経路に渡せることを確認
+- URLは推測させず検索結果のみを返す。`validateUrl` で安全性を検査し、重複を除外、最大5件に制限（テストで確認）
+- 料金は Web検索 $10/1k calls + トークン。1回あたり約$0.012
+- Worker Vitest 32 tests（検索のURL検証・重複除外・キー未設定・失敗系を追加）、Flutter 7 tests（候補検索→取り込みのウィジェットテストを追加）
+- 未確認: 端末UIでの検索操作（エミュレータがログアウト状態のため。ウィジェットテストと実APIで代替）
+
+## CI speedup (2026-09-13)
+
+push時のCIが8分21秒かかっていたため短縮した。
+
+- 直列だった worker / app のジョブを並列化（直列だと待ち時間が足し算になる）
+- release APK のR8検査は `apps/mobile/android/**` や pubspec が変わったときだけ実行（毎回Gradleのダウンロードで数分かかるため）。`workflow_dispatch` では常に実行
+- Gradleキャッシュを追加、同一ブランチの古い実行は `concurrency` で打ち切り
+- `scripts/check.sh` に `worker` / `app` の引数を追加し、CIから必要な半分だけ実行できるようにした
+
 ## Brand assets (2026-09-13)
 
 アプリ表示名を WDRB に変更し、アイコンとスプラッシュを白地・黒文字のワードマークへ統一した。

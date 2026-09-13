@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../core/api.dart';
 import '../../core/images.dart';
 import '../../core/models.dart';
 import '../../core/session.dart';
@@ -28,6 +29,7 @@ class _EditorScreenState extends State<EditorScreen> {
   final imageIds = <String>[];
   final imageUrls = <String>[];
   final previews = <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> candidates = [];
   String? category, color, message;
   bool busy = false, imported = false;
   static const labels = {
@@ -88,34 +90,62 @@ class _EditorScreenState extends State<EditorScreen> {
       message = null;
     });
     fields['sourceUrl']!.text = value;
+    await loadFrom(value);
+  }
+
+  /// 商品名とブランドから候補を探す。URLは推測させず、検索結果のURLだけを使う。
+  Future<void> searchProducts() async {
+    final name = fields['name']!.text.trim(),
+        brand = fields['brand']!.text.trim();
+    if (name.isEmpty && brand.isEmpty) {
+      setState(() => message = '商品名かブランドを入力してください');
+      return;
+    }
+    setState(() {
+      busy = true;
+      message = null;
+      candidates = [];
+    });
+    try {
+      final result = await widget.session.api.post('/api/import/search', {
+        'name': name.isEmpty ? brand : name,
+        if (brand.isNotEmpty) 'brand': brand,
+      });
+      if (!mounted) return;
+      setState(() {
+        candidates = (result['candidates'] as List? ?? [])
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
+        if (candidates.isEmpty) {
+          message = '候補が見つかりませんでした。URLから登録してください';
+        }
+      });
+    } catch (e) {
+      if (mounted) setState(() => message = errorMessage(e));
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  /// 候補の商品ページを取り込む。
+  Future<void> importCandidate(Map<String, dynamic> candidate) async {
+    final value = candidate['url']?.toString() ?? '';
+    if (value.isEmpty) return;
+    setState(() {
+      busy = true;
+      message = null;
+    });
+    fields['sourceUrl']!.text = value;
+    await loadFrom(value);
+  }
+
+  Future<void> loadFrom(String value) async {
     try {
       final result = await widget.session.api.post('/api/import/url', {
         'url': value,
       });
-      final draft = Map<String, dynamic>.from(result['draft'] as Map);
-      for (final key in fields.keys) {
-        final value = draft[key]?.toString();
-        if (value == null || value.isEmpty) continue;
-        final field = fields[key]!;
-        // 通貨は既定値JPYのときだけ解析結果で置き換える。
-        if (key == 'currency' ? field.text == 'JPY' : field.text.isEmpty) {
-          field.text = value;
-        }
-      }
-      // カテゴリと検索用カラーは解析結果をドロップダウンへ反映する。
-      final importedCategory = draft['category']?.toString();
-      if (category == null && categories.containsKey(importedCategory)) {
-        category = importedCategory;
-      }
-      final importedColor = draft['normalizedColor']?.toString();
-      if (color == null && colors.containsKey(importedColor)) {
-        color = importedColor;
-      }
-      imageUrls.addAll((draft['imageUrls'] as List? ?? []).cast<String>());
-      previews.addAll(imageUrls.map((u) => {'originalUrl': u}));
-      message = result['duplicate'] == true
-          ? 'この商品はすでに登録されている可能性があります'
-          : (result['warnings'] as List? ?? []).join('\n');
+      applyResult(result);
+      if (mounted) setState(() => candidates = []);
     } catch (_) {
       message = '商品情報を取得できませんでした。入力して登録できます';
     } finally {
@@ -126,6 +156,34 @@ class _EditorScreenState extends State<EditorScreen> {
         });
       }
     }
+  }
+
+  /// 解析結果をフォームへ反映する（URL取込と候補取込で共通）。
+  void applyResult(Map<String, dynamic> result) {
+    final draft = Map<String, dynamic>.from(result['draft'] as Map);
+    for (final key in fields.keys) {
+      final value = draft[key]?.toString();
+      if (value == null || value.isEmpty) continue;
+      final field = fields[key]!;
+      // 通貨は既定値JPYのときだけ解析結果で置き換える。
+      if (key == 'currency' ? field.text == 'JPY' : field.text.isEmpty) {
+        field.text = value;
+      }
+    }
+    // カテゴリと検索用カラーは解析結果をドロップダウンへ反映する。
+    final importedCategory = draft['category']?.toString();
+    if (category == null && categories.containsKey(importedCategory)) {
+      category = importedCategory;
+    }
+    final importedColor = draft['normalizedColor']?.toString();
+    if (color == null && colors.containsKey(importedColor)) {
+      color = importedColor;
+    }
+    imageUrls.addAll((draft['imageUrls'] as List? ?? []).cast<String>());
+    previews.addAll(imageUrls.map((u) => {'originalUrl': u}));
+    message = result['duplicate'] == true
+        ? 'この商品はすでに登録されている可能性があります'
+        : (result['warnings'] as List? ?? []).join('\n');
   }
 
   Future<void> pickPhoto() async {
@@ -318,6 +376,41 @@ class _EditorScreenState extends State<EditorScreen> {
               ),
             input('name'),
             input('brand'),
+            if (widget.mode != 'url') ...[
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: busy ? null : searchProducts,
+                  icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+                  label: const Text('AIで商品を探す'),
+                ),
+              ),
+              const Text(
+                '商品名やブランドから候補を探し、選ぶと写真と情報を取り込みます。',
+                style: TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+              for (final candidate in candidates)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: Text(
+                    candidate['title']?.toString() ??
+                        candidate['url'].toString(),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                  subtitle: Text(
+                    candidate['shop']?.toString() ??
+                        Uri.tryParse(candidate['url'].toString())?.host ??
+                        '',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  trailing: const Icon(Icons.add, size: 18),
+                  onTap: busy ? null : () => importCandidate(candidate),
+                ),
+              if (candidates.isNotEmpty) const SizedBox(height: 8),
+            ],
             DropdownButtonFormField<String>(
               initialValue: category,
               decoration: const InputDecoration(labelText: 'カテゴリ'),

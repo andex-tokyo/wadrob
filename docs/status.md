@@ -16,7 +16,7 @@
 | 項目 | 値 |
 | --- | --- |
 | API | `https://wadrob-api.tsuchida.workers.dev` |
-| Worker | `wadrob-api` 最新 version `c8563898-3e5e-4b41-97d2-4a8cdcc34cee`（2026-09-13） |
+| Worker | `wadrob-api` 最新 version `5949c6b3-09f8-49bd-a928-3e36db7084ff`（2026-09-13、商品検索APIを追加） |
 | D1 / R2 | `wadrob-db` / `wadrob-images`（Browser Run binding `BROWSER` あり） |
 | AI | `gpt-5.6-luna`（`OPENAI_API_KEY` 登録済み、`reasoning.effort: none`） |
 | 端末 | Pixel 6a エミュレータ（Android 36.1）、release APK インストール済み・Googleログイン済み |
@@ -76,6 +76,7 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 ## 実装済みの主要機能
 
 - ブランド: 表示名 WDRB。白地に黒文字のワードマークで、アイコン（アダプティブ含む）とスプラッシュをログイン画面と同じ Roboto に統一。`tool/generate_brand_assets.py` で再生成できる
+- 登録の入口: URL取込に加えて、**商品名とブランドから商品候補を探す**（`POST /api/import/search`）。候補を選ぶと既存の取込経路で写真・価格・カテゴリを取り込む。写真・手動登録でも同じ導線を使える
 - 認証: Google ID token をWorkerでJWKS検証 → 7日JWT発行 → Secure Storage保存 → 再起動時 `GET /api/auth/me`
 - データ: D1をSource of Truth、全クエリを `user_id` でスコープ。Driftのローカルキャッシュ（ユーザー別、logout時に全消去）
 - クローゼット: 2/3/4列グリッド（密度保存）、カテゴリ横スクロール、インライン検索、複合フィルタ、ソート、Pull to Refresh、空状態・エラー時の非破壊表示
@@ -88,8 +89,8 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 
 | 対象 | 現在 | 要件（§82）との差 |
 | --- | --- | --- |
-| Worker（Vitest） | 29 tests | 認可・所有権、CRUD、Archive、検索/フィルタ/ソート、重複検知、画像メタデータ、処理状態、Google検証のモック、OpenAI出力検証、SSRFリダイレクト/DNS再検証が未 |
-| Flutter | 6 tests | 認証状態、キャッシュ先行表示、アカウント切替の分離、スクロール復元、カテゴリ、検索、フィルタ、ソート、Detail、Editor、URL Import、写真、Archive、画像フォールバックが未 |
+| Worker（Vitest） | 32 tests | 認可・所有権、CRUD、Archive、検索/フィルタ/ソート、重複検知、画像メタデータ、処理状態、Google検証のモック、OpenAI出力検証、SSRFリダイレクト/DNS再検証が未（商品検索のURL検証・重複除外・失敗系は追加済み） |
+| Flutter | 7 tests | 認証状態、キャッシュ先行表示、アカウント切替の分離、スクロール復元、カテゴリ、検索、フィルタ、ソート、Detail、写真、Archive、画像フォールバックが未（URL取込の反映と商品検索の候補取込は追加済み） |
 | 端末スモーク（integration_test） | 2 tests | ONNX背景除去と4:5正規化。debug / profile で実行、releaseは `check-release-apk.sh` で代替 |
 
 ## テスト体制
@@ -135,6 +136,7 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 
 ## 更新履歴（新しい順）
 
+- 2026-09-13: 商品名とブランドから商品候補を探す `POST /api/import/search` を追加（OpenAI web検索、許可ドメイン限定、URLは検索結果のみ）。エディタに「AIで商品を探す」を追加し、候補タップで写真・価格・カテゴリを取り込めるようにした。CIを並列化し、release APK検査はAndroid・依存の変更時のみ実行（8分21秒 → 通常2分台）
 - 2026-09-13: アプリ表示名を WDRB に変更。アイコン（レガシー + アダプティブ）とスプラッシュ（Android 12+ のシステムスプラッシュ含む）を白地・黒文字のワードマークに統一し、書体をログイン画面と同じ Roboto w500 に揃えた。文字の光学中心ズレを修正（スプラッシュ中心 47.6% → 49.9%）
 - 2026-09-13: 検証体制を3層に再編。`scripts/check.sh` / `check-release-apk.sh` / `smoke-device.sh` と GitHub Actions を追加。releaseのR8がONNXのJavaクラスを削除して保存直後にクラッシュする不具合を keep ルールで修正（`proguard-rules.pro`）。実機E2Eで 保存→R2→背景除去→詳細→編集→手放す まで確認
 - 2026-09-13: 進捗台帳を新設し初回コミット。ZOZOTOWN対応（Yahoo!店ミラー + Browser Run）、URL取込の `Illegal invocation` 修正、charset判定、ブランド表記ゆれの正規化、AI抽出の項目拡張（`gpt-5.6-luna`）

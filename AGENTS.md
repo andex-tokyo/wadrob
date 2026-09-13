@@ -15,7 +15,9 @@ WADROB（Flutter + Cloudflare Workers）の作業ルール。担当エージェ�
 変更を入れたら最低限これを通す（まとめて実行できる）。
 
 ```sh
-./scripts/check.sh
+./scripts/check.sh          # すべて
+./scripts/check.sh worker   # Workerのみ
+./scripts/check.sh app      # Flutterのみ
 ```
 
 検証は3層に分かれている。**全部を端末E2Eでやらない。**
@@ -28,7 +30,7 @@ WADROB（Flutter + Cloudflare Workers）の作業ルール。担当エージェ�
 
 - release ビルドは `flutter drive` が非対応なので、release特有のリスク（R8がJNI用クラスを消す等）は `./scripts/check-release-apk.sh` で静的に検査する。APKを作り直したら必ず通す。
 - 端末E2Eを手で流すのは「リリース前」「認証・ネイティブ・画像処理を触ったとき」だけにする。座標タップでの手動操作は再現性が低いので、繰り返す検証はテストへ移す。
-- GitHub Actions（`.github/workflows/check.yml`）が push ごとに `check.sh` と release APK 検査を回す。
+- GitHub Actions（`.github/workflows/check.yml`）は worker と app を並列実行し、release APK 検査は Android・依存が変わったときだけ実行する（毎回ビルドすると数分かかるため）。
 
 Cloudflareへの反映は `cd workers/api && npm run deploy`。端末で確認する場合は release APK を再ビルドして `adb install -r` する（`--dart-define=API_BASE_URL=https://wadrob-api.tsuchida.workers.dev --dart-define=GOOGLE_SERVER_CLIENT_ID=...`）。
 

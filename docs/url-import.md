@@ -33,3 +33,11 @@ Browser Runの描画結果が403や「Access Denied」のブロックページ�
 - 文字コードは `Content-Type` の charset、次に `<meta charset>` の順で判定する。EUC-JP / Shift_JIS / ISO-2022-JP は workerd の `TextDecoder` で扱える。
 - 0円の価格は「未取得」として扱う。取得価格（`purchasePrice`）と購入日はAIでも自動確定しない。
 - Browser Runのbindingは `wrangler.jsonc` の `browser` で設定する。`quickAction()` は `compatibility_date` 2026-03-24 以降が必要で、ローカル開発では動作しない（デプロイ後のみ）。
+
+## 名前とブランドから探す (2026-09-13)
+
+`POST /api/import/search` は商品名とブランドから商品ページの候補を返す。写真や手動で登録するとき、名前とブランドだけで公式の写真・価格・カテゴリを取り込めるようにするための入口。
+
+- OpenAI Responses の `web_search` ツール（`filters.allowed_domains` で取得可能なショップに限定）を使い、**URLは推測させず検索結果に出たものだけ**を返す
+- 返した候補はクライアントが既存の `POST /api/import/url` に渡すため、抽出は決定的解析 + 既存AI補助の経路を通る（検索結果をそのまま信用しない）
+- 1回あたり Web検索 $0.01 + トークン、実測5〜6秒。候補が0件でも失敗にせず、URL手入力へ案内する
