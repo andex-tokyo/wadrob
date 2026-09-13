@@ -23,9 +23,11 @@
 ## Import and images
 
 - `POST /api/import/url` — `{ "url": "https://shop.example/item" }` → `{ sourceUrl, fields, draft, warnings, duplicate }`。保存しない。
-- `POST /api/import/search` — `{ "name": "ウールコート", "brand": "AURALEE" }` → `{ query, candidates: [{ url, title, shop }] }`。OpenAIのweb検索で商品ページ候補を最大5件返す。URLは推測させず、検索結果に出たものだけを返し、取得可能なショップ（`searchDomains`）に限定する。保存しない。
+- `POST /api/import/search` — `{ "name": "ウールコート", "brand": "AURALEE" }` → `{ query, candidates: [{ url, title, shop }] }`。OpenAIのweb検索で商品ページ候補を最大8件返す。URLは推測させず検索結果に出たものだけを返し、ログイン必須のSNS・動画・まとめサイトを `blocked_domains` で除外する。保存しない。
 - `POST /api/classify` — `{ "name": "タートルネック ニット セーター", "brand": "classicalelf" }` → `{ category?, normalizedColor?, sleeve?, subCategory? }`。名前からカテゴリ・検索用カラー・袖丈を推定する。許可値のenumで拘束し、判断できない項目は返さない。保存しない。
 - `POST /api/images` — JPEG/PNG/WebP binary、最大10MB → `{ image }`。
 - `GET /api/images/:id/{original|display|thumbnail}` — 所有者のみ。
 - `POST /api/images/:id/process` — multipartの `display` と `thumbnail`、または `status=processing|failed`。
 - `GET /api/brands`、`GET /api/categories`。
+
+AIを利用し得る `/api/import/*` と `/api/classify` は認証ユーザー単位で20回/分に制限する。超過時は `429 RATE_LIMITED`。OpenAIへの呼び出しは一時的なネットワーク障害と `408` / `409` / `429` / `5xx` を短い指数バックオフで最大3回まで再試行し、`Retry-After` が再試行予算内なら優先する。quota・billingエラー、未完了・拒否・不正な構造化出力は再試行せず各機能の失敗として扱う。

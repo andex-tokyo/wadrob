@@ -17,5 +17,5 @@ export const itemSchema = z.object({
 export const column = (key:string) => key.replace(/[A-Z]/g, x=>'_'+x.toLowerCase());
 export const camel = (row:Record<string,unknown>) => Object.fromEntries(Object.entries(row).map(([k,v])=>[k.replace(/_([a-z])/g,(_,c:string)=>c.toUpperCase()),v]));
 export class ApiError extends Error { constructor(public code:string, message:string, public status=400){super(message);} }
-export interface Env { DB:D1Database; IMAGES:R2Bucket; SESSION_SECRET:string; GOOGLE_SERVER_CLIENT_ID:string; OPENAI_API_KEY?:string; OPENAI_MODEL?:string; BROWSER?:BrowserRun }
+export interface Env { DB:D1Database; IMAGES:R2Bucket; SESSION_SECRET:string; GOOGLE_SERVER_CLIENT_ID:string; OPENAI_API_KEY?:string; OPENAI_MODEL?:string; BROWSER?:BrowserRun; AI_RATE_LIMITER?:RateLimit }
 export type AppEnv = {Bindings:Env; Variables:{userId:string; requestId:string}};

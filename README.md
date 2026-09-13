@@ -1,6 +1,6 @@
 # WDRB（ワドロブ）
 
-Flutter Android + Cloudflare Workers/D1/R2で動く個人用デジタルクローゼット。ローカルcacheから即表示し、Google Sign-In、所有権付きCRUD、URL取込、写真/手動登録、検索、filter、sort、archive、端末内AI背景除去を備える。
+Flutter Android + Cloudflare Workers/D1/R2で動く個人用デジタルクローゼット。ローカルcacheから即表示し、Google Sign-In、所有権付きCRUD、URL取込、写真/手動登録、検索、filter、sort、archive、端末内画像正規化を備える。
 
 アプリの表示名は **WDRB**。リポジトリ名・Worker・D1/R2・Android applicationId（`tokyo.andex.wadrob`）は既存のまま変更しない（Google OAuth の登録やリソース名に紐づくため）。アイコンとスプラッシュは白地に黒文字のワードマークで、`python3 tool/generate_brand_assets.py` で再生成できる。
 
@@ -61,8 +61,8 @@ flutter build appbundle --release --dart-define=API_BASE_URL=https://wadrob-api.
 
 ```sh
 ./scripts/check.sh                    # worker + flutter の高速チェック
-./scripts/check-release-apk.sh        # release APK の R8/JNI クラス検査
-./scripts/smoke-device.sh [device-id] # 端末のONNX・画像正規化スモーク
+./scripts/check-release-apk.sh        # release APK のネイティブ依存検査
+./scripts/smoke-device.sh [device-id] # 端末の画像正規化・SQLiteスモーク
 ```
 
 検証は「ロジック（Flutterテスト）/ API（Workerテスト）/ OS・ネイティブ（端末スモーク）」の3層に分けている。詳細と現在地は [docs/status.md](docs/status.md)。push時は GitHub Actions が高速チェックと release APK 検査を実行する。
@@ -73,6 +73,6 @@ D1 migration: `npm run db:local`。実アカウント確認はWorker deploy、OA
 
 ## Current constraints
 
-端末内背景除去モデルを同梱するため、release APKは約125MB、App Bundleは約95MB。配信時はApp BundleのABI分割を利用する。背景除去ライブラリは現行Flutterでビルドできるが、将来のFlutterが要求するKotlin built-in移行について依存元の更新を追跡する。
+AI背景除去モデルは精度・サイズ・安定性の理由で削除済み。現在は端末内で向き補正、明るく均一な背景だけの保守的な整理、4:5への中央配置、サムネイル生成を行う。床・木目・カーペットなど背景が均一でない写真は構図を保って4:5へ正規化する。
 
 検証結果は [verification record](docs/verification.md) を参照。

@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { z, ZodError } from 'zod';
 import { ApiError, type AppEnv, type Env, camel, column, itemSchema } from './model';
@@ -14,6 +14,7 @@ function pageFetcher(env:Env,url:string):PageFetcher{
 }
 async function images(env:Env,user:string,id:string){return (await env.DB.prepare('SELECT * FROM item_images WHERE item_id=? AND user_id=? ORDER BY sort_order,created_at').bind(id,user).all()).results.map(camel);}
 async function item(env:Env,user:string,id:string){const row=await env.DB.prepare('SELECT * FROM wardrobe_items WHERE id=? AND user_id=?').bind(id,user).first();if(!row)throw new ApiError('NOT_FOUND','服が見つかりません',404);return {...camel(row),images:await images(env,user,id)};}
+export async function enforceAiRateLimit(limiter:RateLimit|undefined,userId:string){if(!limiter)return;const {success}=await limiter.limit({key:userId});if(!success)throw new ApiError('RATE_LIMITED','AI機能の利用回数が多すぎます。1分ほど待ってください',429);}
 export function imageType(b:Uint8Array){if(b[0]===255&&b[1]===216&&b[2]===255)return 'image/jpeg';if(b[0]===137&&b[1]===80&&b[2]===78&&b[3]===71)return 'image/png';if(new TextDecoder().decode(b.slice(0,4))==='RIFF'&&new TextDecoder().decode(b.slice(8,12))==='WEBP')return 'image/webp';throw new ApiError('INVALID_IMAGE','JPEG・PNG・WebPを選択してください');}
 async function storeImage(env:Env,user:string,bytes:Uint8Array,sourceUrl?:string){const type=imageType(bytes),id=crypto.randomUUID(),url=`/api/images/${id}/original`;await env.IMAGES.put(`${user}/${id}/original`,bytes,{httpMetadata:{contentType:type}});await env.DB.prepare('INSERT INTO item_images(id,user_id,original_url,original_source_url,source,created_at) VALUES(?,?,?,?,?,?)').bind(id,user,url,sourceUrl??null,sourceUrl?'product_url':'upload',new Date().toISOString()).run();return {id,originalUrl:url,processingStatus:'pending'};}
 export function createApp(verifier:GoogleTokenVerifier=new GoogleVerifier()){
@@ -25,6 +26,9 @@ export function createApp(verifier:GoogleTokenVerifier=new GoogleVerifier()){
  app.get('/health',c=>c.json({ok:true}));
  app.post('/api/auth/google',async c=>{const {idToken}=z.object({idToken:z.string().min(1).max(10000)}).parse(await c.req.json());const g=await verifier.verify(idToken,c.env.GOOGLE_SERVER_CLIENT_ID),now=new Date().toISOString();await c.env.DB.prepare('INSERT INTO users(id,google_sub,email,display_name,photo_url,created_at,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(google_sub) DO UPDATE SET email=excluded.email,display_name=excluded.display_name,photo_url=excluded.photo_url,updated_at=excluded.updated_at').bind(crypto.randomUUID(),g.sub,g.email,g.name??null,g.picture??null,now,now).run();const u=await c.env.DB.prepare('SELECT id,email,display_name,photo_url FROM users WHERE google_sub=?').bind(g.sub).first();if(!u)throw Error();return c.json({token:await issueSession(u.id as string,c.env.SESSION_SECRET),expiresAt:new Date(Date.now()+604800000).toISOString(),user:camel(u)});});
  app.use('/api/*',async(c,next)=>{const auth=c.req.header('Authorization');if(!auth?.startsWith('Bearer '))throw new ApiError('UNAUTHORIZED','ログインしてください',401);const id=await verifySession(auth.slice(7),c.env.SESSION_SECRET);if(!await c.env.DB.prepare('SELECT id FROM users WHERE id=?').bind(id).first())throw new ApiError('UNAUTHORIZED','ログインしてください',401);c.set('userId',id);await next();});
+ const aiRateLimit:MiddlewareHandler<AppEnv>=async(c,next)=>{await enforceAiRateLimit(c.env.AI_RATE_LIMITER,c.get('userId'));await next();};
+ app.use('/api/import/*',aiRateLimit);
+ app.use('/api/classify',aiRateLimit);
  app.get('/api/auth/me',async c=>c.json({user:camel((await c.env.DB.prepare('SELECT id,email,display_name,photo_url FROM users WHERE id=?').bind(c.get('userId')).first())!)}));
  app.post('/api/auth/logout',c=>c.json({ok:true}));
  app.get('/api/categories',async c=>c.json({categories:(await c.env.DB.prepare('SELECT * FROM categories ORDER BY sort_order').all()).results.map(camel)}));

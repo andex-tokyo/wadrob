@@ -4,7 +4,7 @@
 #   MODE=profile scripts/smoke-device.sh [id]     # profile（リリースに近い）
 #
 # release は flutter drive が非対応のため、release の検証は
-# scripts/check-release-apk.sh（R8でJNI用クラスが消えていないかの静的検査）で行う。
+# scripts/check-release-apk.sh（必須ネイティブ依存と削除済み依存の静的検査）で行う。
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -27,7 +27,7 @@ printf 'device=%s mode=%s\n' "$device" "$mode"
 if [ "$mode" = "release" ]; then
   printf 'flutter drive does not support release mode.\n' >&2
   printf 'use MODE=profile for a release-like run, and run:\n' >&2
-  printf '  bash scripts/check-release-apk.sh   # R8 stripping check\n' >&2
+  printf '  bash scripts/check-release-apk.sh   # native dependency check\n' >&2
   exit 1
 fi
 

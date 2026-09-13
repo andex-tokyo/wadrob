@@ -1,5 +1,25 @@
 # Verification record
 
+## OpenAI integration hardening and repository cleanup (2026-09-14)
+
+- OpenAI Responsesの呼び出しを `src/openai.ts` に共通化。一時的なネットワーク障害とHTTP `408` / `409` / `429` / `5xx` は最大3回、合計4秒以内で指数バックオフし、範囲内の `Retry-After` を優先する
+- quota・billingエラーは再試行しない。Responseの `status` が `completed` 以外、top-level error、refusal、JSON不正、schema不一致を明示的に失敗扱いにした
+- 商品名・ブランドはJSON化してuntrusted dataとして渡し、プロンプト内の命令として解釈しない指示を追加
+- `/api/import/*` と `/api/classify` にユーザー単位20回/分のCloudflare Rate Limiting bindingを追加
+- Node.jsをasdfで22.12.0から22.13.0へ更新。Wrangler 4.131.1、Cloudflare Workers Types 5.20260911.1、Vitest 5.0.0へ更新
+- Worker TypeScript typecheck: pass
+- Worker ESLint: pass
+- Worker Vitest: 52 tests pass（retry成功、quota非retry、未完了、refusal、不正出力、ユーザー別rate limitを追加）
+- Flutter format: 15 files / 0 changed、analyze: no issues、Flutter test: 12 tests pass
+- `./scripts/check.sh`: all checks passed
+- `npm audit`: 0 vulnerabilities
+- `scripts/check-release-apk.sh`: pass（`libsqlite3.so` / `libapp.so` / `libflutter.so` あり、ONNXライブラリなし）
+- `flutter build appbundle --release`: pass（62.9MB）。`jarsigner`: `jar verified`、署名SHA-1 `C8:45:D1:55:6B:FF:6D:F9:68:9B:6E:E1:09:E4:A8:62:F7:9F:17:16`、AAB SHA-256 `84582467ee473937e1ddfc64ce6a5d244fffaf43838b9de30828ebdf1467f0ff`
+- AAB内の `libapp.so` / `libflutter.so` / `libsqlite3.so` を3 ABIで確認し、`libonnxruntime*.so` は0件
+- Cloudflare deploy: pass（Worker version `0330019e-7671-48c3-9ae2-705dcdd2acca`、`AI_RATE_LIMITER: 20 requests/60s` bindingを確認）
+- デプロイ後 `/health`: HTTP 200 / `{"ok":true}`
+- ルート直下の検証スクリーンショット10枚をgitの追跡対象から外し、`/wadrob-*.png` をignoreした。端末上のファイルは残している。既存git履歴の書き換えは行っていない
+
 ## Gallery selection by product id (2026-09-14)
 
 「UNIQLOで最初の何枚かしか取れない」事象を修正した（Worker version `53f91eda-57c9-479b-8555-9f4713b73fe7`）。
@@ -161,7 +181,7 @@ Verified on 2026-09-13:
 
 The emulator was under severe host memory pressure and showed Pixel Launcher/System UI ANR dialogs during its first full boot. After dismissing the system dialog, WADROB rendered and remained the top resumed activity. No WADROB crash was observed.
 
-Not yet verified: completion of real Google account sign-in, authenticated CRUD against production, live URL imports, optional OpenAI fallback, and background removal quality across representative floor photos. The ONNX code and native Android bundle compile successfully.
+This was the initial build snapshot. At this stage, real Google account sign-in, authenticated CRUD, live URL imports, and the optional OpenAI fallback had not yet been verified. Later dated sections record those results; ADR-006 records the subsequent removal of ONNX background removal.
 
 Release artifacts:
 

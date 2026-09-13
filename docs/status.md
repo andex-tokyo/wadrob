@@ -1,6 +1,6 @@
 # WADROB 実装ステータス
 
-最終更新: 2026-09-13
+最終更新: 2026-09-14
 
 **このファイルが進捗の唯一の台帳。** 作業を進めたら同じ変更の中でここも更新する。モデルや担当が変わっても、まずこのファイルを読めば現在地と次の作業が分かるように保つ。
 
@@ -16,21 +16,21 @@
 | 項目 | 値 |
 | --- | --- |
 | API | `https://wadrob-api.tsuchida.workers.dev` |
-| Worker | `wadrob-api` 最新 version `dea2ff2d-3e7b-49aa-8021-03d338ed2112`（2026-09-13、ギャラリー画像の収集に対応） |
-| D1 / R2 | `wadrob-db` / `wadrob-images`（Browser Run binding `BROWSER` あり） |
+| Worker | `wadrob-api` 最新 version `0330019e-7671-48c3-9ae2-705dcdd2acca`（2026-09-14、OpenAI堅牢化・rate limit） |
+| D1 / R2 | `wadrob-db` / `wadrob-images`（Browser Run `BROWSER`、Rate Limit `AI_RATE_LIMITER` あり） |
 | AI | `gpt-5.6-luna`（`OPENAI_API_KEY` 登録済み、`reasoning.effort: none`） |
 | 端末 | Pixel 6a エミュレータ（Android 36.1）、release APK インストール済み・Googleログイン済み |
 | 署名 | **アップロード鍵で署名**（`~/keystores/wadrob-upload.jks`、`apps/mobile/android/key.properties` はgit管理外）。`key.properties` が無い環境はdebug鍵にフォールバック（CI用） |
-| release APK | 2026-09-13 23:03 / 125.4MB |
-| release AAB | 2026-09-13 23:02 / 95.2MB・アップロード鍵で署名済み |
+| release APK | 2026-09-13 23:59 / 64.5MB（ONNX削除後、静的検査pass） |
+| release AAB | 2026-09-14 08:07 / 62.9MB・ONNX削除後・アップロード鍵で署名済み |
 | Play Console | アプリ `WDRB` / `tokyo.andex.wadrob` を作成済み（未公開）。「Android デベロッパーの確認」で鍵の登録待ち |
 
 ## 検証コマンド
 
 ```sh
 ./scripts/check.sh                    # worker + flutter の高速チェック（端末不要）
-./scripts/check-release-apk.sh        # release APK の JNI クラス検査（R8対策）
-./scripts/smoke-device.sh [device-id] # 端末のネイティブ経路（ONNX）スモーク
+./scripts/check-release-apk.sh        # release APK のネイティブ依存検査
+./scripts/smoke-device.sh [device-id] # 端末の画像正規化・SQLiteスモーク
 ```
 
 検証は **ロジック（Flutterテスト）/ API（Workerテスト）/ OS・ネイティブ（端末スモーク）** の3層に分ける。手動の端末E2Eはリリース前とネイティブ・認証・画像処理を触ったときだけ。push時は GitHub Actions が `check.sh` と release APK 検査を回す。
@@ -69,10 +69,10 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 | --- | --- | --- |
 | A 認証 | ✅ | 実アカウントで完走 |
 | B 閲覧 | 🟡 | 同期まで確認。キャッシュ即表示・スクロール復元は実データで未確認 |
-| C URL Import | ✅ | 取込とAI自動入力まで実機確認。R2保存のみ未確認 |
+| C URL Import | ✅ | 取込、AI自動入力、原本R2保存、正規化画像表示まで実機確認 |
 | D 写真 Import | 🟡 | 未確認 |
 | E 手動 | 🟡 | 未確認 |
-| F Archive | 🟡 | 未確認 |
+| F Archive | ✅ | 手放す→通常Gridから消える→「手放した服」フィルタに表示まで実機確認 |
 | G Logout / アカウント切替 | 🟡 | キャッシュ分離の実機確認が未 |
 
 ## 実装済みの主要機能
@@ -80,7 +80,7 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 - ブランド: 表示名 WDRB。白地に黒文字のワードマークで、アイコン（アダプティブ含む）とスプラッシュをログイン画面と同じ Roboto に統一。`tool/generate_brand_assets.py` で再生成できる
 - 登録の入口: URL取込に加えて、**商品名とブランドから商品候補を探す**（`POST /api/import/search`）。候補を選ぶと既存の取込経路で写真・価格・カテゴリを取り込む。写真・手動登録でも同じ導線を使える
 - 画像の選択: URL取込で入った複数画像から**メインを選び、不要な画像を外せる**（保存時の順序が `sort_order` / `is_primary` になる）
-- 画像候補: JSON-LD/OGPが1枚しか持たないページでも、DOMから商品画像を最大12枚集めて候補にする（実測: Yahoo!ショッピング 1枚 → 12枚）。取込直後にモーダルで選択（既定1枚）
+- 画像候補: JSON-LD/OGPが1枚しか持たないページでも、DOMと埋め込みデータから商品画像を最大40枚集めて候補にする。商品ID・型番・最頻ファイル名グループで関連商品を除外し、取込直後にモーダルで選択する（既定1枚）
 - 属性: **袖丈**（半袖/長袖/ノースリーブ/七分袖）をカテゴリと直交する軸として保持。フィルタとチップに対応。**サイズは表記ゆれを名寄せ**（M / Ｍ / Mサイズ / メンズM）
 - 認証: Google ID token をWorkerでJWKS検証 → 7日JWT発行 → Secure Storage保存 → 再起動時 `GET /api/auth/me`
 - データ: D1をSource of Truth、全クエリを `user_id` でスコープ。Driftのローカルキャッシュ（ユーザー別、logout時に全消去）
@@ -88,15 +88,15 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 - 登録: URL取込（決定的解析 → 必要時のみAI）、写真（カメラ/ライブラリ）、手動
 - URL取込: SSRF対策（リダイレクト毎の再検証・DNS・サイズ・Content-Type・タイムアウト）、charset判定（EUC-JP/Shift_JIS対応）、商品名・ブランド整形、重複警告
 - 画像: 原本R2保存 → 端末で4:5に正規化（向き補正・切り出し・中央配置） → display/thumbnail をR2へ → 失敗時は原本へフォールバック、詳細で切替・再処理。**背景除去（ONNX）は精度・サイズの理由で削除**（ADR-006）
-- AI補助: `name` / `brand` / `category` / `subCategory` / `originalColor` / `normalizedColor` / `listPrice` / `currency` / `productCode` / `shopName`。決定的解析値を上書きしない
+- AI補助: `name` / `brand` / `category` / `subCategory` / `originalColor` / `normalizedColor` / `listPrice` / `currency` / `productCode` / `shopName`。決定的解析値を上書きしない。入力はuntrusted dataとして指示と分離し、一時障害を最大3回再試行、未完了・拒否・schema不一致を検出する。AI対象APIはユーザー単位20回/分
 
 ## テスト
 
 | 対象 | 現在 | 要件（§82）との差 |
 | --- | --- | --- |
-| Worker（Vitest） | 37 tests | 認可・所有権、CRUD、Archive、検索/フィルタ/ソート、重複検知、画像メタデータ、処理状態、Google検証のモック、SSRFリダイレクト/DNS再検証が未（商品検索・カテゴリ／袖丈推定は追加済み） |
-| Flutter | 10 tests | 認証状態、キャッシュ先行表示、アカウント切替の分離、スクロール復元、ソート、Detail、写真、Archive、画像フォールバックが未（URL取込・商品検索・チップ・サイズ名寄せは追加済み） |
-| 端末スモーク（integration_test） | 2 tests | ONNX背景除去と4:5正規化。debug / profile で実行、releaseは `check-release-apk.sh` で代替 |
+| Worker（Vitest） | 52 tests | OpenAIの再試行・quota非再試行・未完了・拒否・不正出力、ユーザー別rate limitを追加。認可・所有権、CRUD、Archive、画像メタデータ、処理状態、Google検証、SSRFリダイレクト/DNS再検証のAPI通しテストは未 |
+| Flutter | 12 tests | 認証状態、キャッシュ先行表示、アカウント切替の分離、スクロール復元、ソート、Detail、写真、Archive、画像フォールバックが未（URL取込・商品検索・チップ・サイズ名寄せ・待機表示は追加済み） |
+| 端末スモーク（integration_test） | 2 tests | 4:5画像正規化と端末SQLite。debug / profile で実行、releaseは `check-release-apk.sh` でネイティブ依存を静的検査 |
 
 ## テスト体制
 
@@ -106,22 +106,20 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 | --- | --- | --- |
 | ロジック | 検索・フィルタ・ソート・密度・キャッシュ先行表示・エディタ反映・ブランド名寄せ | Flutterのunit/widgetテスト（`scripts/check.sh`） |
 | API・データ | URL取込・CRUD・archive・重複検知・画像ステートマシン | Worker Vitest（`scripts/check.sh`）。実HTTPの通しテストは未整備 |
-| OS・ネイティブ | ONNX背景除去・画像正規化・写真/カメラ・Googleサインイン | `scripts/smoke-device.sh`（端末）。ピッカー系は実機 |
+| OS・ネイティブ | 画像正規化・SQLite・写真/カメラ・Googleサインイン | `scripts/smoke-device.sh`（端末）。ピッカー系は実機 |
 
-- release限定のリスク（R8がJNI参照クラスを削除）は `scripts/check-release-apk.sh` が数十秒で検出する。`flutter drive` は release 非対応のため、静的検査で代替している
+- release APKの必須ネイティブライブラリ欠落と削除済みONNXの再混入は `scripts/check-release-apk.sh` が検出する。`flutter drive` は release 非対応のため、静的検査で補完している
 - 写真・カメラはOSの外部UIのため自動化せず、実機で確認する
 - 端末の手動操作は座標タップに依存して脆いので、繰り返す検証はテストへ移す方針
 
 ## 次にやること（優先順）
 
-1. 手動登録・Logout → 再ログインを実機で確認して残りの🟡を潰す（短時間）
-2. 写真・カメラ登録を実機で確認（エミュレータのメディアDBが壊れているため。`docs/verification.md` 参照）
-3. 画像の背景除去・正規化の品質確認（白背景以外の床・木目・カーペットなど代表写真）
-4. 実HTTPの通しテストをローカルWorker（`wrangler dev` + 発行したJWT）で整備し、API層を端末なしで検証できるようにする
-5. §82 のテスト拡充（優先: 認可/所有権 → CRUD/Archive → 認証状態とキャッシュ系）
-6. release署名は完了。**Google CloudのOAuthクライアントにアップロード鍵のSHA-1を追加**（Play配信用）→ Play Consoleの「Android デベロッパーの確認」でこの鍵を登録
-7. Wardrobe UIレビュー（§87の品質ゲート／§88の観点）と記録
-8. 小粒: セットアップの `groupId` UI（§35）、Share Intent（§75）、ミラー未掲載ZOZO商品の扱い
+1. 実HTTPの通しテストをローカルWorker（`wrangler dev` + 発行したJWT）で整備し、認可/所有権・CRUD・Archive・画像状態を端末なしで検証できるようにする
+2. §82 のFlutterテストを拡充（優先: 認証状態、キャッシュ先行表示、アカウント切替、スクロール復元）
+3. ユーザー側の実機E2Eで手動登録、Logout→再ログイン、写真/カメラ登録、床・木目・カーペット写真の正規化品質を確認する
+4. **Google CloudのOAuthクライアントにアップロード鍵のSHA-1を追加**（Play配信用）→ Play Consoleの「Android デベロッパーの確認」でこの鍵を登録
+5. Wardrobe UIレビュー（§87の品質ゲート／§88の観点）と記録
+6. 小粒: セットアップの `groupId` UI（§35）、Share Intent（§75）、ミラー未掲載ZOZO商品の扱い
 
 ## 既知の制約
 
@@ -141,6 +139,9 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 
 ## 更新履歴（新しい順）
 
+- 2026-09-14: OpenAI Responses呼び出しを共通化。短い指数バックオフ、`Retry-After`、quota非再試行、未完了・拒否・不正な構造化出力を処理し、プロンプト注入対策とユーザー単位20回/分の制限を追加。Workerは52 tests
+- 2026-09-14: ONNX削除後のrelease AABをアップロード鍵で再生成（62.9MB）。署名fingerprint、必須ネイティブライブラリ、ONNX非混入を確認
+- 2026-09-14: ルート直下の検証スクリーンショットをgit追跡対象から外し、今後の `wadrob-*.png` をignore。背景除去廃止・画像候補40枚・検証状況について文書間の不整合を修正
 - 2026-09-14: UNIQLOで希望の色の写真が出ない問題を修正（`/AsianCommon/` の誤除外と、ファイル名グループ判定の誤りを解消。30色すべてが候補に入る）
 - 2026-09-14: Yahoo!ショッピングで関連商品の画像が混ざる問題を修正。型番トークン（英数字）と最頻ファイル名グループで同一商品のみに絞る
 - 2026-09-14: UNIQLOで画像が少ない問題を修正。商品IDに一致する画像を優先し、収集上限を40枚に（関連商品やUIアセットは除外）

@@ -7,4 +7,5 @@ node_modules/
 key.properties
 .DS_Store
 coverage/
-wadrob-emulator.png
+# Local verification captures can contain account or wardrobe data.
+/wadrob-*.png

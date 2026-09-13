@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { decodeJwt } from 'jose';
+import { z } from 'zod';
 import { issueSession, verifySession } from '../src/auth';
 import { BrowserFetcher, ChainFetcher, SimpleFetcher, validateUrl, zozoYahooMirror, type PageFetcher } from '../src/fetcher';
 import { GenericHtmlParser, GenericJsonLdParser, OpenGraphParser, aiExtract, classifyProduct, collectPageImages, decodeHtml, dedupeImages, importUrl, mergeFields, searchProducts, tidyLabel } from '../src/import';
 import { categories, itemSchema, sleeves, type Env } from '../src/model';
+import { OpenAIRequestError, requestStructured } from '../src/openai';
+import { enforceAiRateLimit } from '../src/index';
 
 describe('URL security', () => {
   it.each(['file:///etc/passwd','http://localhost/x','http://127.0.0.1/x','http://169.254.169.254/latest','ftp://example.com/x'])('rejects %s', (url) => expect(() => validateUrl(url)).toThrow());
@@ -41,6 +44,47 @@ const jsonLd=`<script type="application/ld+json">{"@type":"Product","name":"コ�
 
 afterEach(()=>vi.unstubAllGlobals());
 
+describe('OpenAI response handling', () => {
+  const schema=z.object({value:z.string()});
+  const completed=(value:unknown)=>new Response(JSON.stringify({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify(value)}]}]}));
+  const options={sleep:async()=>{},random:()=>0};
+
+  it('retries a transient rate limit and then succeeds', async () => {
+    const request=vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({error:{code:'rate_limit_exceeded',message:'slow down'}}),{status:429,headers:{'Retry-After':'0'}}))
+      .mockResolvedValueOnce(completed({value:'ok'}));
+    await expect(requestStructured({},'key',schema,request,options)).resolves.toEqual({value:'ok'});
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry quota or billing failures', async () => {
+    const request=vi.fn(async()=>new Response(JSON.stringify({error:{code:'insufficient_quota',message:'quota'}}),{status:429}));
+    await expect(requestStructured({},'key',schema,request,options)).rejects.toMatchObject({code:'insufficient_quota'});
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    {status:'incomplete',incomplete_details:{reason:'max_output_tokens'},output:[]},
+    {status:'completed',output:[{content:[{type:'refusal',refusal:'no'}]}]},
+    {status:'completed',output:[{content:[{type:'output_text',text:'not json'}]}]},
+  ])('rejects incomplete, refused, or malformed structured output', async (body) => {
+    await expect(requestStructured({},'key',schema,async()=>new Response(JSON.stringify(body)),options)).rejects.toBeInstanceOf(OpenAIRequestError);
+  });
+});
+
+describe('AI rate limit', () => {
+  it('uses the authenticated user as the rate-limit key', async () => {
+    const limit=vi.fn(async()=>({success:true}));
+    await enforceAiRateLimit({limit} as unknown as RateLimit,'user-1');
+    expect(limit).toHaveBeenCalledWith({key:'user-1'});
+  });
+
+  it('returns a structured API error when the limit is exceeded', async () => {
+    const limiter={limit:async()=>({success:false})} as unknown as RateLimit;
+    await expect(enforceAiRateLimit(limiter,'user-1')).rejects.toMatchObject({code:'RATE_LIMITED',status:429});
+  });
+});
+
 describe('AI assisted import', () => {
   it('maps structured output to owned fields', async () => {
     const fields=await aiExtract('page text',env(),async()=>aiReply(aiProduct));
@@ -62,7 +106,7 @@ describe('AI assisted import', () => {
     expect(fields.listPrice).toBeUndefined();
   });
   it('reports OpenAI failures through warnings', async () => {
-    vi.stubGlobal('fetch',async()=>new Response('nope',{status:429}));
+    vi.stubGlobal('fetch',async()=>new Response('nope',{status:400}));
     const result=await importUrl('https://shop.example/item',env(),htmlFetcher(`<html><body>${jsonLd}</body></html>`));
     expect(result.warnings).toContain('補助解析を利用できませんでした');
   });
@@ -127,7 +171,7 @@ describe('product search', () => {
     await expect(searchProducts('ニット',undefined,env({OPENAI_API_KEY:undefined}),async()=>searchReply([]))).rejects.toThrow();
   });
   it('reports search failures', async () => {
-    await expect(searchProducts('ニット',undefined,env(),async()=>new Response('nope',{status:429}))).rejects.toThrow();
+    await expect(searchProducts('ニット',undefined,env(),async()=>new Response('nope',{status:400}))).rejects.toThrow();
   });
 });
 
@@ -144,7 +188,7 @@ describe('classification', () => {
     expect(result).toEqual({normalizedColor:'black'});
   });
   it('reports failures', async () => {
-    await expect(classifyProduct('服',undefined,env(),async()=>new Response('nope',{status:500}))).rejects.toThrow();
+    await expect(classifyProduct('服',undefined,env(),async()=>new Response('nope',{status:400}))).rejects.toThrow();
   });
 });
 

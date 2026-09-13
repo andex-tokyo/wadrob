@@ -326,7 +326,7 @@ cached_network_image
 image_picker
 google_sign_in
 shared_preferences（表示設定）
-image / image_background_remover（端末内の画像処理）
+image（端末内の画像正規化）
 
 go_router / freezed / json_serializable は
 規模に対して過剰なため採用していない（ADR-004）。
@@ -2949,7 +2949,7 @@ lib/
     session.dart    認証状態・同期・保存
     cache.dart      Driftのローカルcache
     models.dart     item model / 検索・filter・並び替え / 表記ゆれの名寄せ
-    images.dart     画像処理（正規化・背景除去）と画像API
+    images.dart     画像処理（正規化・明るい均一背景の保守的な整理）と画像API
     widgets.dart    共通widget（画像canvas・エラー表示・確認dialog）
 
   features/
@@ -3191,19 +3191,19 @@ Image fallback
   → Flutter unit/widget test
 API（URL取込・CRUD・archive・画像ステート）
   → Worker Vitest
-OS・ネイティブ（背景除去・画像正規化・写真/カメラ・Googleサインイン）
+OS・ネイティブ（画像正規化・SQLite・写真/カメラ・Googleサインイン）
   → 端末スモーク（integration_test）
 
 コマンド:
 
 ./scripts/check.sh          worker typecheck/lint/test + flutter format/analyze/test
-./scripts/check-release-apk.sh  release APKのJNIクラス検査（R8対策）
-./scripts/smoke-device.sh [id]  端末のONNX・正規化スモーク
+./scripts/check-release-apk.sh  release APKのネイティブ依存検査
+./scripts/smoke-device.sh [id]  端末の画像正規化・SQLiteスモーク
 
 push時は GitHub Actions が worker と app を並列に回し、
 release APK検査はAndroid・依存が変わったときだけ実行する。
 
-release限定の不具合（R8がJNI参照クラスを削除）は
+release限定のネイティブ依存の欠落と、削除済みONNXの再混入は
 静的APK検査で検出する（flutter driveはrelease非対応のため）。
 
 
