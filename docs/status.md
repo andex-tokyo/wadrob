@@ -26,9 +26,12 @@
 ## 検証コマンド
 
 ```sh
-cd workers/api && npm run typecheck && npm run lint && npm test
-cd apps/mobile && dart format --set-exit-if-changed lib test && flutter analyze && flutter test
+./scripts/check.sh                    # worker + flutter の高速チェック（端末不要）
+./scripts/check-release-apk.sh        # release APK の JNI クラス検査（R8対策）
+./scripts/smoke-device.sh [device-id] # 端末のネイティブ経路（ONNX）スモーク
 ```
+
+検証は **ロジック（Flutterテスト）/ API（Workerテスト）/ OS・ネイティブ（端末スモーク）** の3層に分ける。手動の端末E2Eはリリース前とネイティブ・認証・画像処理を触ったときだけ。push時は GitHub Actions が `check.sh` と release APK 検査を回す。
 
 Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認する場合は release APK を再ビルドして `adb install -r` する。
 
@@ -44,18 +47,18 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 | 6 | ローカルキャッシュからの即時表示 | 🟡 | キャッシュが空のため未確認 |
 | 7 | Backend同期 | ✅ | 認証付き `GET /api/items` が成功（0件） |
 | 8 | URL Import | ✅ | Yahoo!ショッピング / andST / ZOZOTOWN（ミラー）/ 楽天を実機確認 |
-| 9 | Item登録 | 🟡 | `POST /api/items` は実装済み、保存操作は未実施 |
-| 10 | 画像R2保存 | 🟡 | 取得元画像の200応答は確認済み、R2書き込みは未確認 |
-| 11 | Wardrobe Grid表示 | 🟡 | 0件のため未確認 |
+| 9 | Item登録 | ✅ | ZOZO商品を保存しD1へ登録されることを確認 |
+| 10 | 画像R2保存 | ✅ | 原本保存→表示用/サムネイル生成→`processing_status=completed`、Grid表示まで確認 |
+| 11 | Wardrobe Grid表示 | ✅ | 実データ1件で画像・ブランド・商品名の表示を確認 |
 | 12 | Search | 🟡 | ローカル検索はユニットテストのみ |
 | 13 | Category Filter | 🟡 | 実装済み、実データ未確認 |
 | 14 | Advanced Filter | 🟡 | ブランド・カラー・サイズ・状態。実データ未確認 |
 | 15 | Sort | 🟡 | 実装済み、実データ未確認 |
-| 16 | Item Detail | 🟡 | 実装済み、実データ未確認 |
-| 17 | Item編集 | 🟡 | 実装済み、実データ未確認 |
-| 18 | Archive | 🟡 | 実装済み、実データ未確認 |
-| 19 | 写真登録 | 🟡 | 実装済み、実機未確認 |
-| 20 | 手動登録 | 🟡 | 実装済み、実機未確認 |
+| 16 | Item Detail | ✅ | 実機で表示・元画像/整えた画像の切替を確認 |
+| 17 | Item編集 | ✅ | 実機でサイズ=Mを入力して保存、D1に反映されることを確認 |
+| 18 | Archive | ✅ | 実機で手放す→通常Gridから消える→「手放した服」フィルタに表示、を確認 |
+| 19 | 写真登録 | 🟡 | 実装済み。エミュレータのメディアDBが壊れており**実機待ち**（アプリ側のアップロード処理まで到達を確認） |
+| 20 | 手動登録 | 🟡 | 実装済み、実機未確認（数十秒で確認できる） |
 | 21 | Logout | 🟡 | 実装済み、実機未確認 |
 
 ## フロー（master-prompt §89）
@@ -86,15 +89,32 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 | --- | --- | --- |
 | Worker（Vitest） | 29 tests | 認可・所有権、CRUD、Archive、検索/フィルタ/ソート、重複検知、画像メタデータ、処理状態、Google検証のモック、OpenAI出力検証、SSRFリダイレクト/DNS再検証が未 |
 | Flutter | 6 tests | 認証状態、キャッシュ先行表示、アカウント切替の分離、スクロール復元、カテゴリ、検索、フィルタ、ソート、Detail、Editor、URL Import、写真、Archive、画像フォールバックが未 |
+| 端末スモーク（integration_test） | 2 tests | ONNX背景除去と4:5正規化。debug / profile で実行、releaseは `check-release-apk.sh` で代替 |
+
+## テスト体制
+
+端末を介した手動E2Eが遅く再現性も低いため、検証手段を3層に分けた。
+
+| 層 | 対象 | 手段 |
+| --- | --- | --- |
+| ロジック | 検索・フィルタ・ソート・密度・キャッシュ先行表示・エディタ反映・ブランド名寄せ | Flutterのunit/widgetテスト（`scripts/check.sh`） |
+| API・データ | URL取込・CRUD・archive・重複検知・画像ステートマシン | Worker Vitest（`scripts/check.sh`）。実HTTPの通しテストは未整備 |
+| OS・ネイティブ | ONNX背景除去・画像正規化・写真/カメラ・Googleサインイン | `scripts/smoke-device.sh`（端末）。ピッカー系は実機 |
+
+- release限定のリスク（R8がJNI参照クラスを削除）は `scripts/check-release-apk.sh` が数十秒で検出する。`flutter drive` は release 非対応のため、静的検査で代替している
+- 写真・カメラはOSの外部UIのため自動化せず、実機で確認する
+- 端末の手動操作は座標タップに依存して脆いので、繰り返す検証はテストへ移す方針
 
 ## 次にやること（優先順）
 
-1. **実データでE2Eを一周する**（最大の未検証領域）。エミュレータまたは実機で「URLから1件登録 → 保存 → グリッド → 詳細 → 編集 → 手放す → 写真追加 → 手動追加 → ログアウト」を通す。保存時に `POST /api/items` → R2保存 → 端末ONNX処理が走る
-2. 画像の背景除去・正規化の品質確認（白背景以外の床・木目・カーペットなど代表写真）
-3. §82 のテスト拡充（優先: 認可/所有権 → CRUD/Archive → 認証状態とキャッシュ系）
-4. release署名。`apps/mobile/android/app/build.gradle.kts` の TODO、Google Cloudへrelease SHA-1登録、AAB再生成
-5. Wardrobe UIレビュー（§87の品質ゲート／§88の観点）と記録
-6. 小粒: セットアップの `groupId` UI（§35）、Share Intent（§75）、ミラー未掲載ZOZO商品の扱い、CI
+1. 手動登録・Logout → 再ログインを実機で確認して残りの🟡を潰す（短時間）
+2. 写真・カメラ登録を実機で確認（エミュレータのメディアDBが壊れているため。`docs/verification.md` 参照）
+3. 画像の背景除去・正規化の品質確認（白背景以外の床・木目・カーペットなど代表写真）
+4. 実HTTPの通しテストをローカルWorker（`wrangler dev` + 発行したJWT）で整備し、API層を端末なしで検証できるようにする
+5. §82 のテスト拡充（優先: 認可/所有権 → CRUD/Archive → 認証状態とキャッシュ系）
+6. release署名。`apps/mobile/android/app/build.gradle.kts` の TODO、Google Cloudへrelease SHA-1登録、AAB再生成
+7. Wardrobe UIレビュー（§87の品質ゲート／§88の観点）と記録
+8. 小粒: セットアップの `groupId` UI（§35）、Share Intent（§75）、ミラー未掲載ZOZO商品の扱い
 
 ## 既知の制約
 
@@ -114,4 +134,5 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 
 ## 更新履歴（新しい順）
 
+- 2026-09-13: 検証体制を3層に再編。`scripts/check.sh` / `check-release-apk.sh` / `smoke-device.sh` と GitHub Actions を追加。releaseのR8がONNXのJavaクラスを削除して保存直後にクラッシュする不具合を keep ルールで修正（`proguard-rules.pro`）。実機E2Eで 保存→R2→背景除去→詳細→編集→手放す まで確認
 - 2026-09-13: 進捗台帳を新設し初回コミット。ZOZOTOWN対応（Yahoo!店ミラー + Browser Run）、URL取込の `Illegal invocation` 修正、charset判定、ブランド表記ゆれの正規化、AI抽出の項目拡張（`gpt-5.6-luna`）

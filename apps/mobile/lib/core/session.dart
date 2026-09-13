@@ -156,7 +156,17 @@ class Session extends ChangeNotifier {
       if (epoch != _epoch) return;
       final id = image['id'] as String;
       if (!_processing.add(id)) continue;
+      // A native crash inside image processing cannot be caught in Dart, so skip
+      // images that already failed once instead of crashing on every launch.
+      if (prefs.getBool('processFailed.$id') == true) continue;
       await ImageService(api).process(image);
+      if (items
+          .expand((i) => i.images)
+          .any((i) => i['id'] == id && i['processingStatus'] == 'completed')) {
+        await prefs.remove('processFailed.$id');
+      } else {
+        await prefs.setBool('processFailed.$id', true);
+      }
       _processing.remove(id);
       if (epoch == _epoch) await sync();
     }

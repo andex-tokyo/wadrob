@@ -69,3 +69,36 @@ ZOZOTOWNは `zozo.jp` 本体を403で拒否するため、2段の代替経路を
 - 実機確認: `https://zozo.jp/shop/publictokyo/goods/82019293/` から、商品画像・商品名「サマーニット セーター ニット メッシュボーダー…」・ブランド「PUBLIC TOKYO」・カテゴリ「ニット」・検索用カラー「マルチ」・定価13860を取得 — `wadrob-import-zozo.png`
 - 保存時の画像取得: ミラー先の画像（`z-shopping.c.yimg.jp`）がHTTP 200 / image/jpegで取得できることを確認
 - Worker Vitest: 29 tests pass（Browser Runの描画・ブロックページ拒否・ミラーURL変換・チェーン順序を追加）
+
+## Device E2E and test rework (2026-09-13)
+
+実機（Pixel 6aエミュレータ）で「URL取込 → 保存 → Grid → Detail → 編集 → 手放す → アーカイブフィルタ」を通した。手放す＝`status=archived`、編集＝`size=M` がD1に反映されることを確認し、画像は原本R2保存→端末ONNX→display/thumbnail生成（`processing_status=completed`）まで完了した。
+
+### 発見した不具合（release限定クラッシュ）
+
+保存直後にアプリが `SIGABRT` で落ちた。tombstoneの abort message は
+
+```
+JNI DETECTED ERROR IN APPLICATION: java_class == null
+    in call to GetMethodID
+    from boolean[] ai.onnxruntime.OrtSession.run(...)
+```
+
+R8が `ai.onnxruntime.**` を難読化・削除したため、JNIがクラスを解決できずプロセスごと落ちていた。debugビルドでは再現しない。`apps/mobile/android/app/proguard-rules.pro` に keep ルールを追加して解決（release APK内の `ai/onnxruntime/OrtSession` 文字列は 3 → 8 に回復）。
+
+処理前に `processing` を立てたまま落ちるため、次回起動でも同じ画像を処理してクラッシュループになる。対策として、一度失敗した画像は端末側で再試行しないガードを入れた（`Session.processPending`）。
+
+### 検証を3層に再編
+
+手動の座標タップE2Eは遅く再現性が低いため、繰り返す検証をテストへ移した。
+
+- `scripts/check.sh`: worker typecheck / lint / Vitest と flutter format / analyze / test をまとめて実行（今回 all checks passed）
+- `scripts/check-release-apk.sh`: release APKに `ai/onnxruntime/OrtSession`、`com/masicai/flutteronnxruntime`、`libonnxruntime*.so` が残っているかを静的検査（R8回帰の検出）
+- `scripts/smoke-device.sh`: `integration_test/native_pipeline_test.dart` を端末で実行し、ONNX背景除去と4:5正規化（960x1200 / 360x450）を検証。debug / profile で pass を確認
+- `flutter drive` は release 非対応のため、release固有の検証は静的APK検査で代替する（profileビルドはminifyされないことを確認済み）
+- `.github/workflows/check.yml`: push ごとに `check.sh` と release APK 検査を実行
+
+### 未確認
+
+- 写真・カメラ登録: エミュレータのメディアDBが壊れており（`MediaProviderClient` 例外、Photo Picker内部エラー）、アプリのアップロード処理まで到達しない。実機で確認する
+- 手動登録、Logout / 再ログイン

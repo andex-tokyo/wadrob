@@ -57,7 +57,15 @@ flutter build appbundle --release --dart-define=API_BASE_URL=https://wadrob-api.
 
 ## Verification
 
-Worker: `npm run typecheck && npm run lint && npm test`。D1 migration: `npm run db:local`。実アカウント確認はWorker deploy、OAuth client作成、端末ログインが必要。
+```sh
+./scripts/check.sh                    # worker + flutter の高速チェック
+./scripts/check-release-apk.sh        # release APK の R8/JNI クラス検査
+./scripts/smoke-device.sh [device-id] # 端末のONNX・画像正規化スモーク
+```
+
+検証は「ロジック（Flutterテスト）/ API（Workerテスト）/ OS・ネイティブ（端末スモーク）」の3層に分けている。詳細と現在地は [docs/status.md](docs/status.md)。push時は GitHub Actions が高速チェックと release APK 検査を実行する。
+
+D1 migration: `npm run db:local`。実アカウント確認はWorker deploy、OAuth client作成、端末ログインが必要。
 
 現在の進捗と残タスクは [status](docs/status.md) に集約している。詳細は [architecture](docs/architecture.md)、[API](docs/api.md)、[auth](docs/auth.md)、[images](docs/images.md)、[URL import](docs/url-import.md)、[UX](docs/ux.md)、[decisions](docs/decisions.md)。
 
