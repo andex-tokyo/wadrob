@@ -79,12 +79,27 @@ export function collectPageImages(html:string,pageUrl:string,limit=40,known:stri
   if(out.length>=500)break;
  }
  // 商品IDなどのトークンがURLに含まれる画像を優先する。
- // 関連商品やナビゲーションの画像が大量に混ざるページ（UNIQLO等）対策。
+ // 関連商品やナビゲーションの画像が大量に混ざるページ（UNIQLO・Yahoo等）対策。
+ // 型番は数字とは限らない（yctops82 等）ため、英数字の塊をトークンにする。
  const tokens=new Set<string>();
- for(const source of [pageUrl,...known])for(const found of source.matchAll(/\d{4,}/g))tokens.add(found[0]);
+ for(const source of [pageUrl,...known]){
+  for(const found of source.toLowerCase().matchAll(/[a-z0-9]{5,}/g)){
+   if(/\d/.test(found[0]))tokens.add(found[0]);
+  }
+ }
  const matches=out.filter(url=>[...tokens].some(token=>url.includes(token)));
  const ordered=matches.length>=5?matches:out;
- return ordered.slice(0,limit);
+ // 同一商品のギャラリーはファイル名の先頭が揃う（106137321b_*, yctops82_*, 4021570436_*）。
+ // 最頻のグループが5枚以上あれば、そこだけを残して関連商品の混入を防ぐ。
+ const groups=new Map<string,string[]>();
+ for(const url of ordered){
+  const stem=(url.split('/').pop()??'').split(/[_.]/)[0].replace(/-\d+$/,'');
+  const group=groups.get(stem)??[];
+  group.push(url);
+  groups.set(stem,group);
+ }
+ const dominant=[...groups.values()].sort((a,b)=>b.length-a.length)[0];
+ return (dominant&&dominant.length>=5?dominant:ordered).slice(0,limit);
 }
 
 // 同じ画像の別クエリ（?width=600 等）を1つにまとめる。
