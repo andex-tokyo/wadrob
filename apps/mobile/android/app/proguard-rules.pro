@@ -1,9 +1,5 @@
-# ONNX Runtime's Java API is looked up from JNI by class and method name.
-# R8 must not rename or strip it, otherwise OrtSession.run aborts the process
-# with "JNI DETECTED ERROR ... java_class == null" in release builds.
--keep class ai.onnxruntime.** { *; }
--keepclassmembers class ai.onnxruntime.** { *; }
--dontwarn ai.onnxruntime.**
-
-# The Flutter plugin that drives ONNX Runtime uses reflection-like JNI entry points.
--keep class com.masicai.flutteronnxruntime.** { *; }
+# 現在、JNIから名前で参照するJavaクラスを持つ依存は無い。
+# （画像の背景除去に使っていたONNX Runtimeは、精度とサイズの理由で削除した）
+#
+# 将来ネイティブのJava APIをJNI経由で使う依存を追加したら、
+# R8がクラスを削除しないよう、ここに keep ルールを書く。

@@ -1,5 +1,26 @@
 # Verification record
 
+## Gallery images and picker modal (2026-09-13)
+
+「Yahoo!ショッピングで1枚しか取れない」事象を修正し、画像はモーダルで選ぶ形にした（Worker version `dea2ff2d-3e7b-49aa-8021-03d338ed2112`）。
+
+- 原因: 商品ページの画像はJSON-LD `image` と `og:image` の1枚しか見ていなかった（実ページにはギャラリーがある）
+- `collectPageImages()` を追加し、DOMの `<img>`（`src`/`data-src`/`data-original`/`srcset`）から最大12枚を収集。JSON-LD/OGPの画像を先頭に置く
+- UI/装飾（sprite・logo・banner・designAssets・elements・symbols・assets等）と静的アセットホスト（`s.yimg.jp`）、小さいサムネイル表記（`_50.jpg`等）を除外。実測で Yahoo!ショッピングのページから12枚の商品画像を取得
+- アプリ: 取込直後に画像選択モーダルを開き、既定は1枚。タップで追加/解除し、番号順が並び順になる。撮影した写真も候補に加わる。「画像を選ぶ（N枚から）」で再選択できる
+- Worker Vitest 39 tests（DOM収集のフィルタ・重複除去・上限）、Flutter 11 tests（モーダルで2枚目を選ぶと保存payloadが `[{url:a},{url:b}]` になることを検証）
+
+## Background removal removed (2026-09-13)
+
+端末内ONNXによる背景除去を削除し、正規化だけを残した（ADR-006）。
+
+- `image_background_remover` を依存から削除。`ImageService` の既定は `NormalizationProcessor`（向き補正・前景の外接矩形・中央配置・余白・960px/360px生成）
+- `libonnxruntime.so`（arm64 19MB / armv7 14MB）と `libonnxruntime4j_jni.so` がAPKから消え、配布サイズが減った
+- R8がJNI参照クラスを消して落ちる不具合の要因も同時に消えたため、`proguard-rules.pro` のONNX用keepルールを撤去
+- `scripts/check-release-apk.sh` は「必要なネイティブライブラリ（libsqlite3/libapp/libflutter）がある」＋「ONNXは含まれない」を検査する形に変更
+- 端末スモークは `integration_test/image_pipeline_test.dart` に置き換え（正規化の4:5検証＋端末のsqlite3でローカルcacheの読み書き）
+- Flutter test 11件 pass、Worker 37件 pass
+
 ## Image selection on import (2026-09-13)
 
 URL取込で入る複数画像から、採用する画像を選べるようにした（Worker version `3b45d97e-4b6c-428b-b800-12eeb2ee382c`）。

@@ -10,7 +10,7 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 device="${1:-}"
 mode="${MODE:-debug}"
-target="integration_test/native_pipeline_test.dart"
+target="integration_test/image_pipeline_test.dart"
 
 cd "$root/apps/mobile"
 flutter pub get >/dev/null

@@ -171,7 +171,7 @@ void main() {
     expect(find.text('88000'), findsOneWidget);
   });
 
-  testWidgets('URL取込の画像からメインを選び、不要な画像を外せる', (tester) async {
+  testWidgets('URL取込の画像をモーダルで選べる（既定1枚）', (tester) async {
     tester.view.physicalSize = const Size(1200, 3000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -202,25 +202,23 @@ void main() {
     await tester.tap(find.text('商品情報を読み込む'));
     await tester.pumpAndSettle();
 
-    // 3枚のうち1枚がメイン、残り2枚は「メインにする」で選べる。
-    expect(find.text('メイン'), findsOneWidget);
-    expect(find.text('メインにする'), findsNWidgets(2));
+    // 取込後は画像選択のモーダルが開き、既定で1枚だけ選ばれている。
+    expect(find.text('使う画像を選ぶ'), findsOneWidget);
+    expect(find.text('1枚'), findsOneWidget);
 
-    // 2枚目（b）をメインにする。
-    await tester.tap(find.text('メインにする').first);
+    // 2枚目（b）を追加で選ぶ。
+    await tester.tap(find.byKey(const ValueKey('candidate-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('2枚'), findsOneWidget);
+    await tester.tap(find.text('この画像で登録'));
     await tester.pumpAndSettle();
 
-    // 最後の1枚（c）を外す。
-    await tester.tap(find.byIcon(Icons.close).last);
-    await tester.pumpAndSettle();
-    expect(find.text('メインにする'), findsOneWidget);
-
-    // 保存時の順序が [b, a] になっている。
+    // 保存時の順序が [a, b] になっている。
     await tester.tap(find.text('保存').first);
     await tester.pumpAndSettle();
     expect(adapter.bodies.last['images'], [
-      {'url': b},
       {'url': a},
+      {'url': b},
     ]);
   });
 }

@@ -1,13 +1,14 @@
-// 端末上でネイティブ経路（ONNX Runtime の背景除去）と画像正規化を通すスモーク。
-// R8 が JNI から参照されるクラスを消すと、ここでプロセスごと落ちる。
-// 実行: scripts/smoke-device.sh [device-id]（MODE=release でリリースビルド）
+// 端末上で画像の正規化とローカルcache（ネイティブのsqlite3）が動くことを確認するスモーク。
+// 実行: scripts/smoke-device.sh [device-id]（MODE=profile でリリースに近い設定）
 import 'dart:typed_data';
 
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
-import 'package:image_background_remover/image_background_remover.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:wadrob/core/cache.dart';
 import 'package:wadrob/core/images.dart';
+import 'package:wadrob/core/models.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -27,23 +28,8 @@ void main() {
     return Uint8List.fromList(img.encodeJpg(source, quality: 90));
   }
 
-  testWidgets('ONNXの背景除去が端末上で完走する', (tester) async {
-    final bytes = sampleJpeg();
-    await BackgroundRemover.instance.initializeOrt();
-    final cutout = await BackgroundRemover.instance.removeBg(
-      bytes,
-      threshold: .48,
-      smoothMask: true,
-      enhanceEdges: true,
-    );
-    expect(cutout.width, greaterThan(0));
-    expect(cutout.height, greaterThan(0));
-    cutout.dispose();
-  }, timeout: const Timeout(Duration(minutes: 5)));
-
-  testWidgets('背景除去と正規化が4:5の画像を返す', (tester) async {
-    final bytes = sampleJpeg();
-    final result = await ClothingImageProcessor().process(bytes);
+  testWidgets('画像の正規化が4:5の表示用画像とサムネイルを返す', (tester) async {
+    final result = await NormalizationProcessor().process(sampleJpeg());
     expect(result.display, isNotEmpty);
     expect(result.thumbnail, isNotEmpty);
 
@@ -53,5 +39,15 @@ void main() {
     expect(display.height, 1200);
     expect(thumbnail.width, 360);
     expect(thumbnail.height, 450);
+  }, timeout: const Timeout(Duration(minutes: 5)));
+
+  testWidgets('端末のsqlite3でローカルcacheを読み書きできる', (tester) async {
+    final cache = WardrobeCache(NativeDatabase.memory());
+    await cache.replace('user-1', [
+      WardrobeItem({'id': 'a', 'name': 'ニット', 'images': []}),
+    ]);
+    final items = await cache.read('user-1');
+    expect(items.single.name, 'ニット');
+    await cache.clear();
   }, timeout: const Timeout(Duration(minutes: 5)));
 }

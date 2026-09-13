@@ -256,14 +256,6 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  flutter_onnxruntime:
-    dependency: transitive
-    description:
-      name: flutter_onnxruntime
-      sha256: "14cb7872d164d8d2fd52e8137775916ea9d46f67a4100ff11cdc62d41752fe5e"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.8.5"
   flutter_plugin_android_lifecycle:
     dependency: transitive
     description:
@@ -431,14 +423,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.9.2"
-  image_background_remover:
-    dependency: "direct main"
-    description:
-      name: image_background_remover
-      sha256: "1499ccf545b92048f0174ebe669ade6763ada09c383a0205d7eb369bc66172d7"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.0.1"
   image_picker:
     dependency: "direct main"
     description:

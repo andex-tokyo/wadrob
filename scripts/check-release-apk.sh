@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # release APK を静的検査する。
-# R8 が JNI から名前で参照されるクラスを消すと、端末上でだけクラッシュする。
-# 端末を待たずに数十秒で検出するためのチェック。
+# 必要なネイティブライブラリが入っているか、削除した依存が復活していないかを見る。
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -13,26 +12,12 @@ if [ ! -f "$apk" ]; then
   exit 1
 fi
 
-# require: <apk 内に残っているべき文字列> <説明>
-require() {
-  local needle="$1" label="$2" count
-  count="$(unzip -p "$apk" 'classes*.dex' 2>/dev/null | strings | grep -c -- "$needle" || true)"
-  if [ "$count" -lt 1 ]; then
-    printf '  -> MISSING: %s (%s)\n' "$needle" "$label"
-    return 1
-  fi
-  printf '  -> ok: %s x%s (%s)\n' "$needle" "$count" "$label"
-}
-
 printf 'checking %s\n' "$apk"
 failed=0
-require 'ai/onnxruntime/OrtSession' 'background removal (ONNX Runtime Java API)' || failed=1
-require 'com/masicai/flutteronnxruntime' 'background removal plugin' || failed=1
-
-# native ライブラリは常に同梱されている必要がある。
-# grep は -c を使う（-q は読み取り途中で閉じて pipefail と衝突する）。
 listing="$(unzip -l "$apk")"
-for lib in libonnxruntime.so libonnxruntime4j_jni.so; do
+
+# 必要なネイティブライブラリ（sqlite3 は drift のローカルcacheに必須）。
+for lib in libsqlite3.so libapp.so libflutter.so; do
   if [ "$(printf '%s\n' "$listing" | grep -c -- "$lib")" -gt 0 ]; then
     printf '  -> ok: %s\n' "$lib"
   else
@@ -41,9 +26,18 @@ for lib in libonnxruntime.so libonnxruntime4j_jni.so; do
   fi
 done
 
+# 削除した依存が復活していないこと（サイズとクラッシュ要因の回帰防止）。
+for gone in libonnxruntime.so libonnxruntime4j_jni.so; do
+  if [ "$(printf '%s\n' "$listing" | grep -c -- "$gone")" -gt 0 ]; then
+    printf '  -> UNEXPECTED: %s（背景除去は削除済み）\n' "$gone"
+    failed=1
+  else
+    printf '  -> ok: %s は含まれない\n' "$gone"
+  fi
+done
+
 if [ "$failed" -ne 0 ]; then
-  printf '\nFAILED: release APK lost classes needed by JNI.\n' >&2
-  printf 'Check apps/mobile/android/app/proguard-rules.pro\n' >&2
+  printf '\nFAILED: release APK の内容が想定と違う。\n' >&2
   exit 1
 fi
 printf '\nrelease APK class check passed\n'

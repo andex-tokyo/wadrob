@@ -41,6 +41,39 @@ export class GenericHtmlParser implements ProductParser {
  parse(html:string):Fields{const {document}=parseHTML(html);const fields:Fields={};for(const [k,v]of Object.entries({name:document.querySelector('h1')?.textContent??document.querySelector('title')?.textContent,description:document.querySelector('meta[name="description"]')?.getAttribute('content')})){if(v)fields[k]={value:v.trim().slice(0,k==='name'?200:10000),source:'html',confidence:.6};}return fields;}
 }
 export function mergeFields(...sources:Fields[]):Fields{const merged:Fields={};for(const s of sources)for(const [k,v] of Object.entries(s))if(!merged[k])merged[k]=v;return merged;}
+
+// 商品ページのDOMから商品画像を集める。JSON-LDやOGPは1枚しか持たないことが多く、
+// 実際にはギャラリーに複数枚あるため、選択肢を広げるために使う。
+export function collectPageImages(html:string,pageUrl:string,limit=12):string[]{
+ const {document}=parseHTML(html);const raw:string[]=[];
+ for(const img of Array.from(document.querySelectorAll('img'))){
+  for(const attr of ['src','data-src','data-original','data-lazy-src','data-echo']){
+   const value=img.getAttribute(attr);if(value)raw.push(value);
+  }
+  const srcset=img.getAttribute('srcset');
+  if(srcset)for(const part of srcset.split(',')){const url=part.trim().split(/\s+/)[0];if(url)raw.push(url);}
+ }
+ const out:string[]=[],seen=new Set<string>();
+ for(const value of raw){
+  let url:URL;try{url=new URL(value,pageUrl);}catch{continue;}
+  if(!['http:','https:'].includes(url.protocol))continue;
+  const path=url.pathname.toLowerCase();
+  if(!/\.(jpe?g|png|webp)$/.test(path))continue;
+  // 装飾・UI・プレースホルダを除外
+  if(/(sprite|logo|icon|banner|bnr|btn|blank|spacer|pixel|loading|noimage|common\/|designassets\/|elements\/|symbols\/|\/assets\/)/.test(path))continue;
+  // ショップの静的アセット配信ホスト（商品画像CDNとは別）
+  if(['s.yimg.jp','s.yimg.com'].includes(url.hostname.toLowerCase()))continue;
+  // 極端に小さいサムネイル表記を除外（_50.jpg, _100.jpg, _thumb.jpg 等）
+  if(/[_\-]([0-9]{1,2}|1[0-9]{2})\.[a-z]+$/.test(path))continue;
+  if(/[_\-](s|t|ss|thumb|small)\.[a-z]+$/.test(path))continue;
+  const key=url.host+url.pathname;
+  if(seen.has(key))continue;
+  seen.add(key);
+  out.push(url.toString());
+  if(out.length>=limit)break;
+ }
+ return out;
+}
 // Unknown enum values are dropped instead of discarding the whole extraction.
 const looseEnum=(values:readonly string[])=>z.string().nullable().transform(v=>v&&values.includes(v)?v:null);
 const aiSchema=z.object({
@@ -94,6 +127,13 @@ export async function importUrl(url:string,env:Env,fetcher:PageFetcher=new Simpl
  try{
   const page=await fetcher.get(sourceUrl,'html');const html=decodeHtml(page.bytes,page.charset);
   fields=mergeFields(new GenericJsonLdParser().parse(html),new OpenGraphParser().parse(html),new GenericHtmlParser().parse(html));
+  // JSON-LD/OGPの画像を先頭に、ページ内の商品画像を足して選択肢を広げる。
+  const extraImages=collectPageImages(html,page.url);
+  if(extraImages.length){
+   const existing=(fields.imageUrls?.value as string[]|undefined)??[];
+   const merged=[...existing,...extraImages].filter((url,index,all)=>all.indexOf(url)===index).slice(0,12);
+   fields.imageUrls={value:merged,source:fields.imageUrls?.source??'html',confidence:fields.imageUrls?.confidence??.6};
+  }
   if(env.OPENAI_API_KEY&&Object.keys(aiProperties).some(k=>fields[k]===undefined)){try{const {document}=parseHTML(html);document.querySelectorAll('script,style,nav,footer').forEach(x=>x.remove());fields=mergeFields(fields,await aiExtract(document.body?.textContent??'',env));}catch(error){console.warn('import ai failed',reason(error));warnings.push('補助解析を利用できませんでした');}}
   const siteName=typeof fields.shopName?.value==='string'?fields.shopName.value:undefined;
   for(const key of ['name','brand']){const field=fields[key];if(field){const tidied=tidyLabel(field.value,key==='name'?siteName:undefined);if(tidied)field.value=tidied;}}
@@ -104,17 +144,18 @@ export async function importUrl(url:string,env:Env,fetcher:PageFetcher=new Simpl
 export function reason(error:unknown){return error instanceof ApiError?`${error.code}:${error.message}`:`${(error as Error)?.name??'Error'}:${(error as Error)?.message??String(error)}`;}
 
 // 名前とブランドから商品ページを探す。URLを推測させず、検索結果に出たURLだけを返す。
-// 取得できることを確認済みのショップに限定して、候補が取り込み可能であるようにする。
-export const searchDomains=['zozo.jp','store.shopping.yahoo.co.jp','item.rakuten.co.jp','www.dot-st.com','www.uniqlo.com','www.gu-global.com'];
+// 取り込めないサイト（ログイン必須・メディア）だけを除外して幅広く探す。
+// 廃番の商品は中古・リユースやブランド公式に残っていることが多いため。
+export const searchBlockedDomains=['wikipedia.org','pinterest.com','pinterest.jp','reddit.com','quora.com','youtube.com','tiktok.com','facebook.com','instagram.com','x.com','twitter.com'];
 const searchSchema=z.object({candidates:z.array(z.object({url:z.string(),title:z.string().nullable(),shop:z.string().nullable()})).max(8)}).strict();
 export async function searchProducts(name:string,brand:string|undefined,env:Env,request:typeof fetch=fetch){
  if(!env.OPENAI_API_KEY)throw new ApiError('AUTH_CONFIG','商品検索が設定されていません',503);
  const payload={
   model:env.OPENAI_MODEL||'gpt-5.6-luna',store:false,reasoning:{effort:'none'},
-  tools:[{type:'web_search',filters:{allowed_domains:searchDomains}}],tool_choice:'auto',
-  instructions:'Find product detail pages for the given garment. Only return URLs that appear in the search results; never invent, complete or guess a URL. Prefer Japanese fashion e-commerce product pages.',
-  input:`商品名: ${name}\nブランド: ${brand||'不明'}\nこの商品の商品詳細ページを最大5件探してください。`,
-  max_output_tokens:1500,
+  tools:[{type:'web_search',filters:{blocked_domains:searchBlockedDomains}}],tool_choice:'auto',
+  instructions:"Find product detail pages for the given garment. Include reused and second-hand marketplaces (Mercari, Yahoo! Auctions, 2nd STREET, ZOZO USED) and the brand's official store when the item is no longer sold new. Only return URLs that appear in the search results; never invent, complete or guess a URL.",
+  input:`商品名: ${name}\nブランド: ${brand||'不明'}\nこの商品の詳細ページを、新品・中古・公式を問わず最大8件探してください。`,
+  max_output_tokens:2000,
   text:{format:{type:'json_schema',name:'candidates',strict:true,schema:{type:'object',properties:{candidates:{type:'array',items:{type:'object',properties:{url:{type:'string'},title:{type:['string','null']},shop:{type:['string','null']}},required:['url','title','shop'],additionalProperties:false}}},required:['candidates'],additionalProperties:false}}},
  };
  const r=await request('https://api.openai.com/v1/responses',{method:'POST',signal:AbortSignal.timeout(30000),headers:{Authorization:`Bearer ${env.OPENAI_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify(payload)});
@@ -130,7 +171,7 @@ export async function searchProducts(name:string,brand:string|undefined,env:Env,
   if(seen.has(url))continue;
   seen.add(url);
   candidates.push({url,...(candidate.title?{title:candidate.title}:{}),...(candidate.shop?{shop:candidate.shop}:{})});
-  if(candidates.length>=5)break;
+  if(candidates.length>=8)break;
  }
  return {query:[brand,name].filter(Boolean).join(' '),candidates};
 }

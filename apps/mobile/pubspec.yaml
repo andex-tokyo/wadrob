@@ -47,7 +47,6 @@ dependencies:
   shared_preferences: ^2.5.5
   image: ^4.9.2
   url_launcher: ^6.3.2
-  image_background_remover: ^2.0.1
   flutter_cache_manager: ^3.4.2
 
 dev_dependencies:

@@ -36,8 +36,19 @@ Browser Runの描画結果が403や「Access Denied」のブロックページ�
 
 ## 名前とブランドから探す (2026-09-13)
 
-`POST /api/import/search` は商品名とブランドから商品ページの候補を返す。写真や手動で登録するとき、名前とブランドだけで公式の写真・価格・カテゴリを取り込めるようにするための入口。
+`POST /api/import/search` は商品名とブランドから商品ページの候補を返す。写真や手動で登録するとき、名前とブランドだけで写真・価格・カテゴリを取り込めるようにするための入口。
 
-- OpenAI Responses の `web_search` ツール（`filters.allowed_domains` で取得可能なショップに限定）を使い、**URLは推測させず検索結果に出たものだけ**を返す
+- OpenAI Responses の `web_search` ツールを使い、**URLは推測させず検索結果に出たものだけ**を返す。取り込めないサイト（ログイン必須のSNS・動画・まとめサイト）だけを `filters.blocked_domains` で除外し、それ以外は幅広く探す
+- 廃番・完売の商品を救うため、**中古・リユース（メルカリ、Yahoo!オークション、2nd STREET、ZOZO USED）やブランド公式**も候補に含める。候補は最大8件
+
+### 商品画像の候補（2026-09-13）
+
+JSON-LDとOGPは商品画像を1枚しか持たないことが多く、実ページにはギャラリーがある。
+そのため `collectPageImages()` でDOMの `<img>`（`src` / `data-src` / `data-original` / `srcset`）から商品画像を最大12枚集め、JSON-LD/OGPの画像を先頭に足して候補にする。
+
+- 装飾・UI・プレースホルダ（sprite / logo / icon / banner / btn / blank / designAssets / elements / symbols / assets など）と、静的アセット配信ホスト（`s.yimg.jp` 等）は除外
+- 極端に小さいサムネイル表記（`_50.jpg` `_100.jpg` `_thumb.jpg` 等）は除外し、500px級の画像を残す
+- 同一パスは重複除去。URLは推測せずDOMにあるものだけを使う
+- 実測: Yahoo!ショッピングの商品ページで1枚 → **12枚**（従来はJSON-LD/OGPの1枚のみ）
 - 返した候補はクライアントが既存の `POST /api/import/url` に渡すため、抽出は決定的解析 + 既存AI補助の経路を通る（検索結果をそのまま信用しない）
 - 1回あたり Web検索 $0.01 + トークン、実測5〜6秒。候補が0件でも失敗にせず、URL手入力へ案内する

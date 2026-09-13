@@ -16,7 +16,7 @@
 | 項目 | 値 |
 | --- | --- |
 | API | `https://wadrob-api.tsuchida.workers.dev` |
-| Worker | `wadrob-api` 最新 version `3b45d97e-4b6c-428b-b800-12eeb2ee382c`（2026-09-13、画像の順序指定に対応） |
+| Worker | `wadrob-api` 最新 version `dea2ff2d-3e7b-49aa-8021-03d338ed2112`（2026-09-13、ギャラリー画像の収集に対応） |
 | D1 / R2 | `wadrob-db` / `wadrob-images`（Browser Run binding `BROWSER` あり） |
 | AI | `gpt-5.6-luna`（`OPENAI_API_KEY` 登録済み、`reasoning.effort: none`） |
 | 端末 | Pixel 6a エミュレータ（Android 36.1）、release APK インストール済み・Googleログイン済み |
@@ -80,13 +80,14 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 - ブランド: 表示名 WDRB。白地に黒文字のワードマークで、アイコン（アダプティブ含む）とスプラッシュをログイン画面と同じ Roboto に統一。`tool/generate_brand_assets.py` で再生成できる
 - 登録の入口: URL取込に加えて、**商品名とブランドから商品候補を探す**（`POST /api/import/search`）。候補を選ぶと既存の取込経路で写真・価格・カテゴリを取り込む。写真・手動登録でも同じ導線を使える
 - 画像の選択: URL取込で入った複数画像から**メインを選び、不要な画像を外せる**（保存時の順序が `sort_order` / `is_primary` になる）
+- 画像候補: JSON-LD/OGPが1枚しか持たないページでも、DOMから商品画像を最大12枚集めて候補にする（実測: Yahoo!ショッピング 1枚 → 12枚）。取込直後にモーダルで選択（既定1枚）
 - 属性: **袖丈**（半袖/長袖/ノースリーブ/七分袖）をカテゴリと直交する軸として保持。フィルタとチップに対応。**サイズは表記ゆれを名寄せ**（M / Ｍ / Mサイズ / メンズM）
 - 認証: Google ID token をWorkerでJWKS検証 → 7日JWT発行 → Secure Storage保存 → 再起動時 `GET /api/auth/me`
 - データ: D1をSource of Truth、全クエリを `user_id` でスコープ。Driftのローカルキャッシュ（ユーザー別、logout時に全消去）
 - クローゼット: 2/3/4列グリッド（密度保存）、カテゴリ横スクロール、インライン検索、複合フィルタ、ソート、Pull to Refresh、空状態・エラー時の非破壊表示
 - 登録: URL取込（決定的解析 → 必要時のみAI）、写真（カメラ/ライブラリ）、手動
 - URL取込: SSRF対策（リダイレクト毎の再検証・DNS・サイズ・Content-Type・タイムアウト）、charset判定（EUC-JP/Shift_JIS対応）、商品名・ブランド整形、重複警告
-- 画像: 原本R2保存 → 端末内ONNXで背景除去 → 4:5正規化 → display/thumbnail をR2へ → 失敗時は原本へフォールバック、詳細で切替・再処理
+- 画像: 原本R2保存 → 端末で4:5に正規化（向き補正・切り出し・中央配置） → display/thumbnail をR2へ → 失敗時は原本へフォールバック、詳細で切替・再処理。**背景除去（ONNX）は精度・サイズの理由で削除**（ADR-006）
 - AI補助: `name` / `brand` / `category` / `subCategory` / `originalColor` / `normalizedColor` / `listPrice` / `currency` / `productCode` / `shopName`。決定的解析値を上書きしない
 
 ## テスト
@@ -140,6 +141,8 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 
 ## 更新履歴（新しい順）
 
+- 2026-09-13: URL取込で商品画像をDOMから最大12枚集めるようにし、取り込んだ画像をモーダルで選べるようにした（既定1枚）。背景除去の削除でAPKは125MB→64.5MB
+- 2026-09-13: 画像の背景除去（ONNX）を削除し正規化のみに（ADR-006）。AI検索の対象を広げ、中古・リユース・ブランド公式も候補に含めるようにした
 - 2026-09-13: URL取込の画像から**メインを選ぶ／不要な画像を外す**UIを追加。保存APIは `images: [{id}|{url}]` の順序つき配列を受け取る（`imageIds`/`imageUrls` は後方互換で維持）
 - 2026-09-13: 配布用のアップロード鍵を作成し、releaseビルドに設定（`key.properties` はgit管理外）。AAB/APKを同鍵で再生成。Play Consoleの開発者確認に登録するSHA-1/SHA-256と公開鍵（.pem）を用意
 - 2026-09-13: 袖丈（半袖/長袖/ノースリーブ/七分袖）を属性として追加（migration `0003_sleeve.sql`、可視チップ＋AI推定＋フィルタ）。サイズの表記ゆれを名寄せ（M/Ｍ/Mサイズ/メンズM）。master-prompt を改訂し、カテゴリ・袖丈・フィルタ・groupIdの記述を実装に合わせた

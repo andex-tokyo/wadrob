@@ -1,7 +1,5 @@
-import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
-import 'package:image_background_remover/image_background_remover.dart';
 import 'package:dio/dio.dart';
 import 'api.dart';
 
@@ -18,32 +16,6 @@ class NormalizationProcessor implements ImageProcessor {
   @override
   Future<ProcessedImage> process(Uint8List bytes) =>
       compute(normalizeImage, bytes);
-}
-
-class ClothingImageProcessor implements ImageProcessor {
-  static Future<void>? _initializing;
-  Future<void> _initialize() =>
-      _initializing ??= BackgroundRemover.instance.initializeOrt();
-  @override
-  Future<ProcessedImage> process(Uint8List bytes) async {
-    try {
-      await _initialize();
-      final cutout = await BackgroundRemover.instance.removeBg(
-        bytes,
-        threshold: .48,
-        smoothMask: true,
-        enhanceEdges: true,
-      );
-      final data = await cutout.toByteData(format: ui.ImageByteFormat.png);
-      cutout.dispose();
-      if (data != null) {
-        return compute(normalizeImage, data.buffer.asUint8List());
-      }
-    } catch (_) {
-      // The original image remains available; normalization is still useful.
-    }
-    return compute(normalizeImage, bytes);
-  }
 }
 
 ProcessedImage normalizeImage(Uint8List bytes) {
@@ -158,7 +130,7 @@ class ImageService {
   final Api api;
   final ImageProcessor processor;
   ImageService(this.api, {ImageProcessor? processor})
-    : processor = processor ?? ClothingImageProcessor();
+    : processor = processor ?? NormalizationProcessor();
   Future<Map<String, dynamic>> upload(Uint8List bytes) async =>
       Map<String, dynamic>.from(
         (await api.dio.post(

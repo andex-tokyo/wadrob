@@ -49,7 +49,9 @@ class _EditorScreenState extends State<EditorScreen> {
   final fields = <String, TextEditingController>{};
   // 画像は表示順そのまま。先頭がメイン画像になる。
   // 登録済み/アップロード済みは 'id'、URL取込の未取得画像は 'url' を持つ。
-  final previews = <Map<String, dynamic>>[];
+  // 選べる画像（URL取込の候補＋撮影した写真）と、実際に登録する画像（順序つき、先頭がメイン）。
+  List<Map<String, dynamic>> imageCandidates = [];
+  var previews = <Map<String, dynamic>>[];
   List<Map<String, dynamic>> candidates = [];
   String? category, color, sleeve, message;
   bool busy = false, imported = false;
@@ -82,6 +84,7 @@ class _EditorScreenState extends State<EditorScreen> {
     color = widget.item?.data['normalizedColor'] as String?;
     sleeve = widget.item?.data['sleeve'] as String?;
     for (final image in widget.item?.images ?? <Map<String, dynamic>>[]) {
+      imageCandidates.add(image);
       previews.add(image);
     }
     if (widget.mode == 'photo') {
@@ -166,6 +169,107 @@ class _EditorScreenState extends State<EditorScreen> {
     await loadFrom(value);
   }
 
+  /// 取り込んだ画像から、実際に登録する画像を選ぶ。
+  /// 既定は1枚。複数選ぶと選んだ順に並び、先頭がメインになる。
+  Future<void> pickImages() async {
+    if (imageCandidates.isEmpty) return;
+    final chosen = List<Map<String, dynamic>>.from(previews);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, update) {
+          void toggle(Map<String, dynamic> candidate) => update(() {
+            if (chosen.any((c) => identical(c, candidate))) {
+              chosen.removeWhere((c) => identical(c, candidate));
+            } else if (chosen.length < 8) {
+              chosen.add(candidate);
+            }
+          });
+
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      const Text('使う画像を選ぶ', style: TextStyle(fontSize: 16)),
+                      const Spacer(),
+                      Text(
+                        '${chosen.length}枚',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'タップで選択。番号の小さい画像が一覧のメインになります。',
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Flexible(
+                    child: GridView.count(
+                      shrinkWrap: true,
+                      crossAxisCount: 3,
+                      mainAxisSpacing: 8,
+                      crossAxisSpacing: 8,
+                      children: [
+                        for (final (index, candidate)
+                            in imageCandidates.indexed)
+                          GestureDetector(
+                            key: ValueKey('candidate-$index'),
+                            onTap: () => toggle(candidate),
+                            child: Stack(
+                              children: [
+                                Positioned.fill(
+                                  child: ItemImage(
+                                    api: widget.session.api,
+                                    image: candidate,
+                                    thumbnail: false,
+                                  ),
+                                ),
+                                if (chosen.any((c) => identical(c, candidate)))
+                                  Positioned(
+                                    right: 4,
+                                    top: 4,
+                                    child: _ImageBadge(
+                                      '${chosen.indexWhere((c) => identical(c, candidate)) + 1}',
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () => Navigator.pop(sheetContext),
+                      child: const Text('この画像で登録'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    if (!mounted) return;
+    setState(() => previews = chosen);
+  }
+
   /// 名前からカテゴリ・検索用カラーを推定し、未選択のときだけ埋める。
   /// カテゴリは一覧の軸なので、選ばせずに埋まるに越したことはない。
   Future<void> classify() async {
@@ -203,7 +307,15 @@ class _EditorScreenState extends State<EditorScreen> {
         'url': value,
       });
       applyResult(result);
-      if (mounted) setState(() => candidates = []);
+      if (mounted) {
+        setState(() => candidates = []);
+        // 画像が複数あるときは、その場でどれを使うか選ばせる。
+        if (imageCandidates.length > 1) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) pickImages();
+          });
+        }
+      }
     } catch (_) {
       message = '商品情報を取得できませんでした。入力して登録できます';
     } finally {
@@ -241,11 +353,13 @@ class _EditorScreenState extends State<EditorScreen> {
     if (sleeve == null && sleeves.containsKey(importedSleeve)) {
       sleeve = importedSleeve;
     }
-    previews.addAll(
-      (draft['imageUrls'] as List? ?? []).cast<String>().map(
-        (u) => {'url': u, 'originalUrl': u},
-      ),
-    );
+    for (final url in (draft['imageUrls'] as List? ?? []).cast<String>()) {
+      imageCandidates.add({'url': url, 'originalUrl': url});
+    }
+    // 既定は1枚（先頭）。複数ある場合はモーダルで選び直せる。
+    if (previews.isEmpty && imageCandidates.isNotEmpty) {
+      previews.add(imageCandidates.first);
+    }
     message = result['duplicate'] == true
         ? 'この商品はすでに登録されている可能性があります'
         : (result['warnings'] as List? ?? []).join('\n');
@@ -301,6 +415,7 @@ class _EditorScreenState extends State<EditorScreen> {
       if (bytes.length > 10000000) throw Exception('10MB以下の画像を選択してください');
       final image = await ImageService(widget.session.api).upload(bytes);
       previews.add(image);
+      imageCandidates.add(image);
       unawaited(ImageService(widget.session.api).process(image));
       // 撮った直後に名前を入力できるようキーボードを出す。
       if (mounted) nameFocus.requestFocus();
@@ -518,6 +633,12 @@ class _EditorScreenState extends State<EditorScreen> {
                 onPressed: busy ? null : () => pickPhoto(choose: true),
                 icon: const Icon(Icons.add_photo_alternate_outlined),
                 label: const Text('写真を追加'),
+              ),
+            if (imageCandidates.length > 1)
+              TextButton.icon(
+                onPressed: busy ? null : pickImages,
+                icon: const Icon(Icons.photo_library_outlined, size: 18),
+                label: Text('画像を選ぶ（${imageCandidates.length}枚から）'),
               ),
             if (previews.length > 1)
               const Align(

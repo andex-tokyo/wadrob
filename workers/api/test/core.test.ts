@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { decodeJwt } from 'jose';
 import { issueSession, verifySession } from '../src/auth';
 import { BrowserFetcher, ChainFetcher, SimpleFetcher, validateUrl, zozoYahooMirror, type PageFetcher } from '../src/fetcher';
-import { GenericHtmlParser, GenericJsonLdParser, OpenGraphParser, aiExtract, classifyProduct, decodeHtml, importUrl, mergeFields, searchProducts, tidyLabel } from '../src/import';
+import { GenericHtmlParser, GenericJsonLdParser, OpenGraphParser, aiExtract, classifyProduct, collectPageImages, decodeHtml, importUrl, mergeFields, searchProducts, tidyLabel } from '../src/import';
 import { categories, itemSchema, sleeves, type Env } from '../src/model';
 
 describe('URL security', () => {
@@ -141,6 +141,35 @@ describe('label tidying', () => {
       .toBe('ひらっと心が躍る。シアーカーディガンce1260606');
     expect(tidyLabel('＜二宮こずえさん出演YouTube紹介アイテム＞【追加予約】パールボタンニットベスト | [公式]カレンソロジー（Curensology）通販','Curensology'))
       .toBe('パールボタンニットベスト');
+  });
+});
+
+describe('gallery images', () => {
+  const page = (body: string) => `<html><body>${body}</body></html>`;
+  it('collects product images from the DOM and drops chrome', () => {
+    const html = page(`
+      <img src="/common/logo.png">
+      <img src="https://cdn.example/a_500.jpg">
+      <img data-src="https://cdn.example/b_500.jpg?v=1">
+      <img srcset="https://cdn.example/c_500.jpg 1x, https://cdn.example/c_1000.jpg 2x">
+      <img src="https://cdn.example/tiny_50.jpg">
+      <img src="https://cdn.example/thumb_s.jpg">
+      <img src="https://cdn.example/sprite.png">
+      <img src="/relative/d_500.jpg">
+    `);
+    expect(collectPageImages(html, 'https://shop.example/item')).toEqual([
+      'https://cdn.example/a_500.jpg',
+      'https://cdn.example/b_500.jpg?v=1',
+      'https://cdn.example/c_500.jpg',
+      'https://cdn.example/c_1000.jpg',
+      'https://shop.example/relative/d_500.jpg',
+    ]);
+  });
+  it('caps the number of candidates', () => {
+    const html = page(
+      Array.from({ length: 20 }, (_, n) => `<img src="https://cdn.example/p${n}_500.jpg">`).join(''),
+    );
+    expect(collectPageImages(html, 'https://shop.example/item').length).toBe(12);
   });
 });
 
