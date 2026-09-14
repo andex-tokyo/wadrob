@@ -6,6 +6,8 @@ import 'core/cache.dart';
 import 'core/session.dart';
 import 'features/wardrobe/wardrobe_screen.dart';
 
+const appBackground = Color(0xfffafaf8);
+
 final sessionProvider = Provider<Session>(
   (ref) => throw UnimplementedError('Session is injected at startup'),
 );
@@ -35,14 +37,14 @@ class WadrobApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        scaffoldBackgroundColor: Colors.white,
+        scaffoldBackgroundColor: appBackground,
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xff252522),
           primary: const Color(0xff252522),
-          surface: Colors.white,
+          surface: appBackground,
         ),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.white,
+          backgroundColor: appBackground,
           surfaceTintColor: Colors.transparent,
           elevation: 0,
         ),

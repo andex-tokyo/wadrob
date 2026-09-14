@@ -44,26 +44,32 @@ void main() {
     expect(session.browse.sleeve, 'sleeveless');
 
     await tester.tap(find.widgetWithText(TextButton, 'シャツ'));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(session.browse.sleeve, 'sleeveless');
     expect(shortcuts, findsOneWidget);
 
     await tester.tap(find.widgetWithText(TextButton, 'パンツ'));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(session.browse.sleeve, isEmpty);
     expect(shortcuts, findsNothing);
 
-    await tester.drag(
-      find.byKey(const ValueKey('category-swipe-area')),
-      const Offset(-500, 0),
-    );
+    final swipeArea = find.byKey(const ValueKey('category-swipe-area'));
+    final pantsPage = find.byKey(const ValueKey('category-page-pants'));
+    final start = tester.getTopLeft(pantsPage).dx;
+    final gesture = await tester.startGesture(tester.getCenter(swipeArea));
+    await gesture.moveBy(const Offset(-20, 0));
+    await tester.pump();
+    await gesture.moveBy(const Offset(-240, 0));
+    await tester.pump();
+    expect(tester.getTopLeft(pantsPage).dx, lessThan(start - 200));
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    await tester.fling(swipeArea, const Offset(-800, 0), 1200);
     await tester.pumpAndSettle();
     expect(session.browse.category, 'suits');
 
-    await tester.drag(
-      find.byKey(const ValueKey('category-swipe-area')),
-      const Offset(500, 0),
-    );
+    await tester.fling(swipeArea, const Offset(800, 0), 1200);
     await tester.pumpAndSettle();
     expect(session.browse.category, 'pants');
 

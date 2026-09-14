@@ -1,7 +1,7 @@
 # Brand font
 
 `RobotoFlex-Regular.ttf` は Android 端末の `/system/fonts/RobotoFlex-Regular.ttf` から取り出したもの。
-アプリのログイン画面（Flutterの `FontWeight.w500`）と同じ書体でアイコンとスプラッシュを描くために同梱している。
+アプリのクローゼット画面と同じRobotoの字形・字間でアイコンとスプラッシュを描くために同梱している。
 
 再取得する場合:
 

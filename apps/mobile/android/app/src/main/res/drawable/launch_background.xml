@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- WDRB のスプラッシュ: 白地の中央に黒いワードマーク。 -->
+<!-- WDRB のスプラッシュ: アプリ背景の中央に黒いワードマーク。 -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@android:color/white" />
+    <item android:drawable="@color/app_background" />
     <item>
         <bitmap
             android:gravity="center"

@@ -43,4 +43,4 @@ Cloudflareへの反映は `cd workers/api && npm run deploy`。端末で確認�
 - AIの抽出は決定的解析の後に回し、既存値を上書きしない。`purchasePrice`・`size`・`purchasedAt` はAIでも自動確定しない。
 - 価格0は「未取得」として扱う。
 - release APKの必須ネイティブライブラリと、削除済みONNXライブラリが再混入していないことは `scripts/check-release-apk.sh` で確認する。
-- アプリ表示名は WDRB。アイコン・スプラッシュは `python3 tool/generate_brand_assets.py` で生成する（書体はログイン画面と同じ Roboto、白地に黒文字）。applicationId とリソース名は変更しない。
+- アプリ表示名は WDRB。アイコン・スプラッシュは `python3 tool/generate_brand_assets.py` で生成する（クローゼット見出しと同じRoboto・字間、`#FAFAF8` 地に `#252522` の文字）。applicationId とリソース名は変更しない。

@@ -1,5 +1,17 @@
 # Verification record
 
+## Smooth category paging and brand icon revision (2026-09-14)
+
+- カテゴリ切替をドラッグ終了時の即時差し替えからFlutter `PageView` へ変更。隣ページが指の移動へ追従し、離すとページ単位でスナップする
+- widget testでドラッグ中に現ページのx座標が指の移動方向へ200px以上動くこと、左右フリック後のカテゴリ、袖丈条件の維持・解除を確認
+- アイコン生成時の単文字advanceをRobotoのpair advanceへ変更してカーニングを保持。trackingを画面見出し相当の0.19em、weightを400、ワードマーク幅を64%へ変更
+- アプリ、レガシー/アダプティブアイコン、通常/Android 12スプラッシュの背景を `#FAFAF8` に統一。文字色は `#252522`。生成後の不透明アイコンalphaが全画素255であることを確認
+- `./scripts/check.sh`: pass。Worker 54 tests、Flutter 13 tests、analyze no issues
+- `flutter build apk --release`（本番API・Googleログイン設定）: pass、64,638,404 bytes
+- `scripts/check-release-apk.sh`: pass。必須native libraryあり、ONNX非混入
+- Android SDK `apksigner verify --print-certs`: pass。V2 signer SHA-1 `c845d1556bff6df9689b6ee109e4a862f79f1716`
+- `/Users/yuki/Desktop/WDRB.apk` へ配置し、ビルド元とのSHA-256一致を確認: `977684fd36f939d4eeb288bff69ce8bee3662ac680915d6894a7d527a4d9b423`
+
 ## Release APK with latest wardrobe UI (2026-09-14)
 
 - `flutter build apk --release --dart-define=API_BASE_URL=https://wadrob-api.tsuchida.workers.dev --dart-define=GOOGLE_SERVER_CLIENT_ID=...`: pass

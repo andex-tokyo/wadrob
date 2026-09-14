@@ -13,17 +13,31 @@ class WardrobeScreen extends StatefulWidget {
 }
 
 class _WardrobeScreenState extends State<WardrobeScreen> {
-  final scroll = ScrollController();
   final search = TextEditingController();
+  late final categoryValues = ['', ...categories.keys];
   late final categoryKeys = <String, GlobalKey>{
     for (final value in ['', ...categories.keys]) value: GlobalKey(),
   };
+  late final categoryScrolls = <String, ScrollController>{
+    for (final value in ['', ...categories.keys]) value: ScrollController(),
+  };
+  late final PageController categoryPager;
   bool searching = false;
-  double categoryDragDistance = 0;
   Session get session => widget.session;
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = categoryValues.indexOf(session.browse.category);
+    categoryPager = PageController(initialPage: initial < 0 ? 0 : initial);
+  }
+
   @override
   void dispose() {
-    scroll.dispose();
+    categoryPager.dispose();
+    for (final controller in categoryScrolls.values) {
+      controller.dispose();
+    }
     search.dispose();
     super.dispose();
   }
@@ -33,7 +47,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     setState(() {});
   }
 
-  void selectCategory(String value) {
+  void applyCategory(String value) {
     session.browse.category = value;
     if (!['tops', 'shirts'].contains(value)) session.browse.sleeve = '';
     changed();
@@ -48,24 +62,42 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
           curve: Curves.easeOut,
         );
       }
-      if (scroll.hasClients) scroll.jumpTo(0);
     });
   }
 
-  void swipeCategory(DragEndDetails details) {
-    final velocity = details.primaryVelocity ?? 0;
-    final distance = categoryDragDistance;
-    categoryDragDistance = 0;
-    if (distance.abs() < 48 && velocity.abs() < 150) return;
-    final values = ['', ...categories.keys];
-    final current = values.indexOf(session.browse.category);
-    final movesForward = distance.abs() >= 48 ? distance < 0 : velocity < 0;
-    final next = (current + (movesForward ? 1 : -1)).clamp(
-      0,
-      values.length - 1,
+  void selectCategory(String value) {
+    final page = categoryValues.indexOf(value);
+    if (page < 0 || !categoryPager.hasClients) return;
+    if (categoryPager.page?.round() == page) {
+      applyCategory(value);
+      final currentScroll = categoryScrolls[value];
+      if (currentScroll?.hasClients ?? false) {
+        currentScroll!.animateTo(
+          0,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+        );
+      }
+      return;
+    }
+    categoryPager.animateToPage(
+      page,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
     );
-    if (next != current) selectCategory(values[next]);
   }
+
+  List<WardrobeItem> itemsForCategory(String category) => BrowseOptions(
+    density: session.browse.density,
+    category: category,
+    brand: session.browse.brand,
+    color: session.browse.color,
+    sleeve: ['tops', 'shirts'].contains(category) ? session.browse.sleeve : '',
+    size: session.browse.size,
+    status: session.browse.status,
+    sort: session.browse.sort,
+    query: session.browse.query,
+  ).apply(session.items);
 
   Future<void> addItem({String? mode}) async {
     final selected =
@@ -120,7 +152,8 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     }
     if (saved == true) {
       search.clear();
-      if (scroll.hasClients) scroll.jumpTo(0);
+      final currentScroll = categoryScrolls[session.browse.category];
+      if (currentScroll?.hasClients ?? false) currentScroll!.jumpTo(0);
       setState(() => searching = false);
     }
   }
@@ -184,6 +217,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                           onPressed: () => set(() {
                             session.browse.clear();
                             search.clear();
+                            selectCategory('');
                           }),
                           child: const Text('すべて解除'),
                         ),
@@ -434,18 +468,25 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                 ),
               ),
             Expanded(
-              child: GestureDetector(
+              child: PageView.builder(
                 key: const ValueKey('category-swipe-area'),
-                behavior: HitTestBehavior.opaque,
-                onHorizontalDragStart: (_) => categoryDragDistance = 0,
-                onHorizontalDragUpdate: (details) =>
-                    categoryDragDistance += details.primaryDelta ?? 0,
-                onHorizontalDragEnd: swipeCategory,
-                onHorizontalDragCancel: () => categoryDragDistance = 0,
-                child: RefreshIndicator(
-                  onRefresh: session.sync,
-                  child: _content(items, density),
-                ),
+                controller: categoryPager,
+                itemCount: categoryValues.length,
+                onPageChanged: (page) => applyCategory(categoryValues[page]),
+                itemBuilder: (_, page) {
+                  final category = categoryValues[page];
+                  return KeyedSubtree(
+                    key: ValueKey('category-page-$category'),
+                    child: RefreshIndicator(
+                      onRefresh: session.sync,
+                      child: _content(
+                        itemsForCategory(category),
+                        density,
+                        category,
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
           ],
@@ -465,7 +506,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     },
   );
 
-  Widget _content(List<WardrobeItem> items, int density) {
+  Widget _content(List<WardrobeItem> items, int density, String category) {
     if (!session.loaded && session.syncing) {
       return GridView.builder(
         padding: const EdgeInsets.all(16),
@@ -508,6 +549,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                           session.browse.clear();
                           search.clear();
                           changed();
+                          selectCategory('');
                         },
                   child: Text(session.items.isEmpty ? '服を追加' : '条件を解除'),
                 ),
@@ -521,8 +563,8 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
       builder: (context, bounds) {
         final width = (bounds.maxWidth - 32 - (density - 1) * 12) / density;
         return GridView.builder(
-          key: const PageStorageKey('wardrobe-grid'),
-          controller: scroll,
+          key: PageStorageKey('wardrobe-grid-$category'),
+          controller: categoryScrolls[category],
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 88),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
