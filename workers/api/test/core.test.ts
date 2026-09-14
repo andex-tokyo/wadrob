@@ -119,6 +119,49 @@ describe('AI assisted import', () => {
 });
 
 describe('AI fallback triggering', () => {
+  it('rejects a product URL redirected to a login page', async () => {
+    const login: PageFetcher = { get: async () => ({
+      bytes: new TextEncoder().encode('<html><head><title>ログイン | ONWARD CROSSET</title></head><body><h1>ログイン・新規会員登録</h1></body></html>'),
+      url: 'https://crosset.onward.co.jp/login',
+      type: 'text/html',
+    }) };
+    const result=await importUrl('https://crosset.onward.co.jp/items/BLFBGM0412',env({OPENAI_API_KEY:undefined}),login);
+    expect(result.fields).toEqual({});
+    expect(result.draft.name).toBeUndefined();
+    expect(result.warnings).toContain('商品情報を取得できませんでした。入力して登録できます');
+  });
+  it('rejects an unavailable-product page instead of using its heading as a name', async () => {
+    const result=await importUrl('https://www.muji.com/jp/ja/store/cmdty/detail/4550584652318',env({OPENAI_API_KEY:undefined}),htmlFetcher('<html><head><title>該当する商品がありません | 無印良品</title></head><body><h1>該当する商品がありません</h1></body></html>'));
+    expect(result.fields).toEqual({});
+    expect(result.draft.name).toBeUndefined();
+  });
+  it('rejects an ABC-MART page whose product code differs from the requested URL', async () => {
+    const wrong=`<html><head><title>WMNS GUIDE 15 | ABC-MART</title></head><body><script type="application/ld+json">{"@type":"Product","name":"WMNS GUIDE 15","sku":"S10684-26","image":"https://cdn.example/s10684.jpg"}</script></body></html>`;
+    const fetcher:PageFetcher={get:async()=>({bytes:new TextEncoder().encode(wrong),url:'https://www.abc-mart.net/shop/g/g6248870001018/',type:'text/html'})};
+    const result=await importUrl('https://www.abc-mart.net/shop/g/g6248870001018/',env({OPENAI_API_KEY:undefined}),fetcher);
+    expect(result.fields).toEqual({});
+    expect(result.draft.name).toBeUndefined();
+  });
+  it('accepts an ABC-MART page containing the requested product code', async () => {
+    const requested='https://www.abc-mart.net/shop/g/g7206060001039/';
+    const html=`<html><head><link rel="canonical" href="/shop/g/g7206060001039/"><meta property="og:title" content="スキルシューター7229"></head><body><img src="https://cdn.example/7206060001039_1.jpg"></body></html>`;
+    const fetcher:PageFetcher={get:async()=>({bytes:new TextEncoder().encode(html),url:requested,type:'text/html'})};
+    const result=await importUrl(requested,env({OPENAI_API_KEY:undefined}),fetcher);
+    expect(result.draft.name).toBe('スキルシューター7229');
+    expect(result.warnings).toEqual([]);
+  });
+  it('retries an invalid response from the original product URL and accepts a valid render', async () => {
+    const requested='https://crosset.onward.co.jp/items/KKAGSW0013';
+    const first:PageFetcher={get:async()=>({bytes:new TextEncoder().encode('<title>ログイン</title><h1>ログイン</h1>'),url:'https://crosset.onward.co.jp/login',type:'text/html'})};
+    const rendered:PageFetcher={get:async(url)=>{
+      expect(url).toBe(requested);
+      const html=`<script type="application/ld+json">{"@type":"Product","name":"SUVIN Tシャツ","sku":"KKAGSW0013","image":["https://cdn.example/1.jpg","https://cdn.example/2.jpg"]}</script>`;
+      return {bytes:new TextEncoder().encode(html),url:requested,type:'text/html'};
+    }};
+    const result=await importUrl(requested,env({OPENAI_API_KEY:undefined}),first,rendered);
+    expect(result.draft.name).toBe('SUVIN Tシャツ');
+    expect(result.warnings).toEqual([]);
+  });
   it('renders again when the fetched page is thin', async () => {
     const thin = '<html><head><title>読み込み中</title></head><body><div id="app"></div></body></html>';
     const rich = `<html><head><meta property="og:title" content="ウールコート"><meta property="og:image" content="https://cdn.example/a.jpg"></head>

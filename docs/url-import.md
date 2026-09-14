@@ -17,6 +17,19 @@
 | 楽天市場 | 可 | 商品ページは EUC-JP。文字コード判定が必須 |
 | ZOZOTOWN（zozo.jp） | 可（ミラー経由） | zozo.jp本体は403。同一商品IDのZOZOTOWN Yahoo!店へ自動で切り替えて取得する |
 
+## 国内ファッションEC上位20の監査 (2026-09-14)
+
+Workerと同条件の通常fetchと決定的パーサーで商品詳細URLを監査した。OpenAI補助・Browser Run・端末操作を含まないため、本番E2Eの完了判定ではなく通常取得経路の互換性調査として扱う。生ログは [verification.md](verification.md) に記録した。
+
+| 判定 | サイト |
+| --- | --- |
+| 商品名・画像を取得 | UNIQLO、and ST、PAL CLOSET、USAGI ONLINE、GU、mix.tokyo、2nd STREET、マルイウェブチャネル、URBAN RESEARCH、WACOAL、BELLUNA、NISSEN、BEAMS |
+| 403 / 不安定 | BAYCREW'S STORE、UNITED ARROWS、WORLD ONLINE STORE |
+| 商品外ページを検出して手入力へ移行 | ONWARD CROSSET、MUJI、ABC-MART |
+| 商品詳細未判定 | FELISSIMO（一覧ページの到達性のみ確認） |
+
+ONWARD CROSSETはログインへのredirect、MUJIは商品なし表示、ABC-MARTは指定コードとは別の商品をHTTP 200で返した。previewを返す前に認証URL、商品なし見出し、ABC-MARTの商品コード一致を検査し、不一致なら抽出値を破棄して手入力へ移す。Browser Runがある環境では、redirect先ではなく入力された商品URLを描画し直し、検査を通った内容だけを採用する。
+
 ZOZOTOWNの商品は `store.shopping.yahoo.co.jp/zozo/<商品ID>` にも同一IDで出品されている。`/shop/<shop>/goods/<id>/` 形式のURLは自動でこのミラーへ切り替える。ミラーに無い商品はCloudflare Browser Runで描画を試み、それでも取得できなければ手動入力へフォールバックする。
 
 ### 取得の優先順位
@@ -66,9 +79,9 @@ JSON-LDとOGPは商品画像を1枚しか持たないことが多く、実ペー
 
 判定するときはパス区切りを意識する。たとえば `/AsianCommon/` を `/common/` の除外ルールで消してしまう事故を防ぐ。UNIQLOのように関連商品が181枚並ぶページでも、その商品の画像だけが残る。
 
-### 内容が薄いページの取り直し（2026-09-13）
+### 内容が薄いページ・商品外ページの取り直し（2026-09-14）
 
-JS描画のページやbot対策で内容が薄い場合、決定的解析の結果（名前の有無・画像枚数）でスコアを見て、**Browser Runで描画した結果のほうが良ければ差し替える**。描画結果は常にページの内容のみを根拠にし、URLや値の推測はしない。
+JS描画のページやbot対策で内容が薄い場合、決定的解析の結果（名前の有無・画像枚数）でスコアを見て、**Browser Runで描画した結果のほうが良ければ差し替える**。ログイン・商品なし・商品コード不一致を検出した場合も入力URLから描画し直す。描画結果も同じ品質検査を通し、商品ページと確認できない値をAIへ渡さない。URLや値の推測はしない。
 - 返した候補はクライアントが既存の `POST /api/import/url` に渡すため、抽出は決定的解析 + 既存AI補助の経路を通る（検索結果をそのまま信用しない）
 - 1回あたり Web検索 $0.01 + トークン、実測5〜6秒。候補が0件でも失敗にせず、URL手入力へ案内する
 - AI呼び出しは一時的なネットワーク障害やrate limitを最大3回まで短く再試行する。未完了・拒否・JSON schema不一致は失敗として扱い、quota・billingエラーは再試行しない。API入口は認証ユーザー単位で20回/分に制限する

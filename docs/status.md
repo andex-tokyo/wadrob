@@ -16,7 +16,7 @@
 | 項目 | 値 |
 | --- | --- |
 | API | `https://wadrob-api.tsuchida.workers.dev` |
-| Worker | `wadrob-api` 最新 version `6222eaeb-3164-4569-8215-d7859d10c4a3`（2026-09-14、カテゴリ統合・つなぎ系補正） |
+| Worker | `wadrob-api` 最新 version `750102b2-c78f-46c5-b559-6e3fe57281a6`（2026-09-14、商品外ページの誤登録防止） |
 | D1 / R2 | `wadrob-db` / `wadrob-images`（Browser Run `BROWSER`、Rate Limit `AI_RATE_LIMITER` あり） |
 | AI | `gpt-5.6-luna`（`OPENAI_API_KEY` 登録済み、`reasoning.effort: none`） |
 | 端末 | Pixel 6a エミュレータ（Android 36.1）、release APK インストール済み・Googleログイン済み |
@@ -87,7 +87,7 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 - データ: D1をSource of Truth、全クエリを `user_id` でスコープ。Driftのローカルキャッシュ（ユーザー別、logout時に全消去）
 - クローゼット: 2/3/4列グリッド（密度保存）、カテゴリはタップと指へ追従するPageViewの左右スワイプで切替、インライン検索、複合フィルタ、ソート、Pull to Refresh、空状態・エラー時の非破壊表示。下部バーをなくし、右下の黒い円形＋ボタンから服を追加
 - 登録: URL取込（決定的解析 → 必要時のみAI）、写真（カメラ/ライブラリ）、手動
-- URL取込: SSRF対策（リダイレクト毎の再検証・DNS・サイズ・Content-Type・タイムアウト）、charset判定（EUC-JP/Shift_JIS対応）、商品名・ブランド整形、重複警告
+- URL取込: SSRF対策（リダイレクト毎の再検証・DNS・サイズ・Content-Type・タイムアウト）、charset判定（EUC-JP/Shift_JIS対応）、商品名・ブランド整形、重複警告。ログイン転送・商品なし見出し・ABC-MARTの商品コード不一致を弾き、入力URLからBrowser Runで再取得する
 - 画像: 原本R2保存 → 端末で4:5に正規化（向き補正・切り出し・中央配置） → display/thumbnail をR2へ → 失敗時は原本へフォールバック、詳細で切替・再処理。**背景除去（ONNX）は精度・サイズの理由で削除**（ADR-006）
 - AI補助: `name` / `brand` / `category` / `subCategory` / `originalColor` / `normalizedColor` / `listPrice` / `currency` / `productCode` / `shopName`。決定的解析値を上書きしない。入力はuntrusted dataとして指示と分離し、一時障害を最大3回再試行、未完了・拒否・schema不一致を検出する。AI対象APIはユーザー単位20回/分
 
@@ -95,7 +95,7 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 
 | 対象 | 現在 | 要件（§82）との差 |
 | --- | --- | --- |
-| Worker（Vitest） | 54 tests | OpenAIの再試行・quota非再試行・未完了・拒否・不正出力、ユーザー別rate limit、旧ニット値とつなぎ系のトップス補正を追加。認可・所有権、CRUD、Archive、画像メタデータ、処理状態、Google検証、SSRFリダイレクト/DNS再検証のAPI通しテストは未 |
+| Worker（Vitest） | 59 tests | OpenAIの再試行・quota非再試行・未完了・拒否・不正出力、ユーザー別rate limit、旧ニット値とつなぎ系のトップス補正、商品外ページ検出を追加。認可・所有権、CRUD、Archive、画像メタデータ、処理状態、Google検証、SSRFリダイレクト/DNS再検証のAPI通しテストは未 |
 | Flutter | 13 tests | 袖丈ショートカット、カテゴリの左右スワイプ、下部追加ボタンを追加。認証状態、キャッシュ先行表示、アカウント切替の分離、スクロール復元、ソート、Detail、写真、Archive、画像フォールバックが未 |
 | 端末スモーク（integration_test） | 2 tests | 4:5画像正規化と端末SQLite。debug / profile で実行、releaseは `check-release-apk.sh` でネイティブ依存を静的検査 |
 
@@ -130,6 +130,8 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 - ワンピース・スカートは master-prompt §34 のカテゴリenumに無いため「その他」になる。オールインワン・つなぎ系はトップスになる
 - Browser Runの `quickAction()` はローカル開発では動作しない（デプロイ後のみ）
 
+- 国内ファッションEC上位20の通常fetch監査では13サイトで商品名・画像を取得。BAYCREW'S / UNITED ARROWSは403、WORLDは取得が不安定。ONWARD / MUJI / ABC-MARTで確認した商品外ページは誤登録せず手入力へ移す（自動取得の成功は未確認）
+
 ## 再発防止メモ
 
 - workerdではグローバル `fetch` をフィールドへ代入して `this.request(...)` と呼ぶと `Illegal invocation` で失敗する。素の関数呼び出しにする（過去に本番のURL取込が全滅した原因）
@@ -140,6 +142,8 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 
 ## 更新履歴（新しい順）
 
+- 2026-09-14: ONWARDのログイン転送、MUJIの商品なし表示、ABC-MARTの別商品差し替えを商品として採用しない品質検査を追加。入力URLからのBrowser Run再取得も追加し、本番Worker `750102b2-c78f-46c5-b559-6e3fe57281a6` へ反映。Worker 59 tests
+- 2026-09-14: 国内ファッションEC売上上位20をWorkerと同じ通常fetch・決定的パーサーで監査。13サイトで商品名・画像を取得し、403/不安定3サイト、商品外ページの誤解析3サイト、商品詳細未判定1サイトを特定
 - 2026-09-14: カテゴリ一覧をPageView化し、指へ追従する横移動と自然なスナップへ変更。アイコンはRobotoのペアカーニングを保ち、画面見出しと同じ字間・太さへ調整。アプリ・アイコン・スプラッシュ背景を `#FAFAF8` に統一。署名済みAPKを再生成してデスクトップへ配置
 - 2026-09-14: 最新UIを含む署名済みrelease APKを本番設定で生成。静的検査と署名を確認し、`/Users/yuki/Desktop/WDRB.apk` に配置（64,531,028 bytes、SHA-256 `9efb78dc73d53f81079836e28e99a510b88c0b1ae0598da36dbdddf5f82247ee`）
 - 2026-09-14: 一覧の左右スワイプで前後のカテゴリへ移動し、選択タブも追従する操作を追加。下部バーを廃止して表示領域を広げ、服の追加は右下の黒い円形＋ボタンに変更

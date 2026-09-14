@@ -43,6 +43,25 @@ export class GenericHtmlParser implements ProductParser {
 }
 export function mergeFields(...sources:Fields[]):Fields{const merged:Fields={};for(const s of sources)for(const [k,v] of Object.entries(s))if(!merged[k])merged[k]=v;return merged;}
 
+// Some shops answer a product URL with HTTP 200 while showing an authentication,
+// unavailable, or entirely different product page. Reject those pages before AI sees
+// them; otherwise a convincing error page becomes a valid-looking wardrobe draft.
+export function importPageIssue(sourceUrl:string,pageUrl:string,html:string,fields:Fields):string|undefined{
+ let source:URL,page:URL;try{source=new URL(sourceUrl);page=new URL(pageUrl);}catch{return 'invalid_url';}
+ if(/\/(?:login|signin|sign-in)(?:\/|$)/i.test(page.pathname))return 'authentication_page';
+ const {document}=parseHTML(html);
+ const label=[fields.name?.value,document.querySelector('title')?.textContent,document.querySelector('h1')?.textContent]
+  .filter(v=>typeof v==='string').join(' ').replace(/\s+/g,' ').trim();
+ if(/該当する商品がありません|お探しの商品(?:が|は)見つかりません|商品が見つかりません|商品は存在しません/i.test(label))return 'unavailable_product';
+ const host=source.hostname.toLowerCase();
+ const abc=/^\/shop\/g\/g([^/?]+)/i.exec(source.pathname);
+ if((host==='abc-mart.net'||host.endsWith('.abc-mart.net'))&&abc){
+  const requested=decodeURIComponent(abc[1]).toLowerCase();
+  if(requested.length>=6&&!html.toLowerCase().includes(requested))return 'product_mismatch';
+ }
+ return undefined;
+}
+
 // 商品ページのDOMから商品画像を集める。JSON-LDやOGPは1枚しか持たないことが多く、
 // 実際にはギャラリーに複数枚あるため、選択肢を広げるために使う。
 export function collectPageImages(html:string,pageUrl:string,limit=40,known:string[]=[]):string[]{
@@ -159,19 +178,23 @@ export async function importUrl(url:string,env:Env,fetcher:PageFetcher=new Simpl
   let html=decodeHtml(page.bytes,page.charset);
   let parsed=mergeFields(new GenericJsonLdParser().parse(html),new OpenGraphParser().parse(html),new GenericHtmlParser().parse(html));
   let pageImages=collectPageImages(html,page.url,40,(parsed.imageUrls?.value as string[]|undefined)??[]);
-  // JS描画のページやbot対策で内容が薄いときは、描画して取り直す。
-  if(renderer&&(parsed.name===undefined||pageImages.length<2)){
+  let issue=importPageIssue(sourceUrl,page.url,html,parsed);
+  // JS描画のページやbot対策で内容が薄いとき、または商品外ページへ
+  // 差し替えられたときは、入力された商品URLから描画して取り直す。
+  if(renderer&&(issue!==undefined||parsed.name===undefined||pageImages.length<2)){
    try{
-    const rendered=await renderer.get(page.url,'html');
+    const rendered=await renderer.get(sourceUrl,'html');
     const renderedHtml=decodeHtml(rendered.bytes,rendered.charset);
     const renderedParsed=mergeFields(new GenericJsonLdParser().parse(renderedHtml),new OpenGraphParser().parse(renderedHtml),new GenericHtmlParser().parse(renderedHtml));
     const renderedImages=collectPageImages(renderedHtml,rendered.url,40,(renderedParsed.imageUrls?.value as string[]|undefined)??[]);
+    const renderedIssue=importPageIssue(sourceUrl,rendered.url,renderedHtml,renderedParsed);
     const score=(source:Fields,images:string[])=>(source.name?1:0)+(source.brand?1:0)+(source.listPrice?1:0)+Math.min(images.length,3);
-    if(score(renderedParsed,renderedImages)>score(parsed,pageImages)){
-     page=rendered;html=renderedHtml;parsed=renderedParsed;pageImages=renderedImages;
+    if(renderedIssue===undefined&&(issue!==undefined||score(renderedParsed,renderedImages)>score(parsed,pageImages))){
+     page=rendered;html=renderedHtml;parsed=renderedParsed;pageImages=renderedImages;issue=undefined;
     }
    }catch(error){console.warn('render retry failed',reason(error));}
   }
+  if(issue)throw new ApiError('FETCH_FAILED',`商品ページとして確認できませんでした (${issue})`);
   fields=parsed;
   // JSON-LD/OGPの画像を先頭に、ページ内の商品画像を足して選択肢を広げる。
   if(pageImages.length){

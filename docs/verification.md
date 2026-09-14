@@ -296,3 +296,29 @@ R8が `ai.onnxruntime.**` を難読化・削除したため、JNIがクラスを
 
 - 写真・カメラ登録: エミュレータのメディアDBが壊れており（`MediaProviderClient` 例外、Photo Picker内部エラー）、アプリのアップロード処理まで到達しない。実機で確認する
 - 手動登録、Logout / 再ログイン
+
+## ファッションEC売上上位20サイト監査 (2026-09-14)
+
+2024年度の国内ファッションEC売上上位20（モール除外）を対象に、Workerと同じ `SimpleFetcher`（`User-Agent: Wadrob/1.0`、redirect最大4回、12秒、公開DNS検査）と決定的パーサーで実URLを取得した。OpenAI補助とBrowser Runは使っていない。19サイトは商品詳細URL、商品URLを確保できなかったFELISSIMOだけ一覧ページで到達性を確認した。
+
+- 商品名と画像を取得: UNIQLO、and ST、PAL CLOSET、USAGI ONLINE、GU、mix.tokyo、2nd STREET、マルイウェブチャネル、URBAN RESEARCH、WACOAL、BELLUNA、NISSEN、BEAMS（13サイト）
+- 価格まで決定的に取得: PAL CLOSET、USAGI ONLINE、mix.tokyo、URBAN RESEARCH、NISSEN（5サイト）
+- HTTP取得失敗: BAYCREW'S STORE（403）、UNITED ARROWS（403）、WORLD ONLINE STORE（成功する回と403になる回があり不安定）
+- 商品ではないページを成功扱い: ONWARD CROSSET（`/login`へredirectし商品名が「ログイン」）、MUJI（商品名が「該当する商品がありません」）、ABC-MART（指定コードとは別のSAUCONY商品を返す）
+- FELISSIMO: 一覧ページのHTTP取得・画像取得のみ確認。商品詳細の取込は未判定
+
+監査用Vitestを3回実行し、最終実行は16.25秒でpassした。一時テストは通常CIを外部サイト依存にしないため削除した。HTTP 200だけでは取込成功と判定できず、ログイン・商品なし・別商品への差し替えを検知する品質判定が必要と分かった。
+
+## 商品外ページの誤登録防止 (2026-09-14)
+
+上位20監査で見つかった3 URLをWorkerと同じ `SimpleFetcher` で再取得し、誤った抽出値を破棄することを一時Vitestから確認した。一時テストは外部サイト依存を通常CIへ持ち込まないため削除し、同じ3パターンを固定HTMLの回帰テストへ移した。
+
+- ONWARD CROSSET: `BLFBGM0412` は最終URL `/login`、判定 `authentication_page`
+- MUJI: `4550584652318` は見出し「該当する商品がありません」、判定 `unavailable_product`
+- ABC-MART: URLの商品コード `6248870001018` に対し、返却商品は SAUCONY `S10684-26`。指定コードがHTMLに無く、判定 `product_mismatch`
+- ABC-MART正常系確認: 現行商品 `7206060001039` はcanonical、OG URL、hidden goods、カートURLに同じコードを含み、商品コード一致判定を通る
+- 実HTTP一時Vitest: 3 tests pass / 1.55s。3件とも `draft.name` は未設定、`warnings` は手入力可能な取得失敗を返した
+- `./scripts/check.sh worker`: typecheck / lint / Vitest 59 tests、all checks passed
+- 本番deploy: Worker version `750102b2-c78f-46c5-b559-6e3fe57281a6`
+
+Browser Runは商品外ページを検出した場合、転送先ではなく元の商品URLから再描画する。描画後も同じ品質判定を通過した場合だけpreviewへ採用する。本番の認証付き端末E2Eはユーザー確認待ち。
