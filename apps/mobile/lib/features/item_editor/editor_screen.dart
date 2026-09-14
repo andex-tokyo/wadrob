@@ -14,10 +14,12 @@ class EditorScreen extends StatefulWidget {
     required this.session,
     this.mode = 'manual',
     this.item,
+    this.initialUrl,
   });
   final Session session;
   final String mode;
   final WardrobeItem? item;
+  final String? initialUrl;
   @override
   State<EditorScreen> createState() => _EditorScreenState();
 }
@@ -90,7 +92,12 @@ class _EditorScreenState extends State<EditorScreen> {
       imageCandidates.add(image);
       previews.add(image);
     }
-    if (widget.mode == 'photo') {
+    if (widget.mode == 'url' && widget.initialUrl != null) {
+      url.text = widget.initialUrl!;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) importUrl();
+      });
+    } else if (widget.mode == 'photo') {
       // 2回目以降は前回使った方（カメラ/ライブラリ）をすぐ開く。
       WidgetsBinding.instance.addPostFrameCallback((_) => pickPhoto());
     } else if (widget.mode == 'manual') {

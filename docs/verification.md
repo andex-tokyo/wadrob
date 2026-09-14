@@ -322,3 +322,16 @@ R8が `ai.onnxruntime.**` を難読化・削除したため、JNIがクラスを
 - 本番deploy: Worker version `750102b2-c78f-46c5-b559-6e3fe57281a6`
 
 Browser Runは商品外ページを検出した場合、転送先ではなく元の商品URLから再描画する。描画後も同じ品質判定を通過した場合だけpreviewへ採用する。本番の認証付き端末E2Eはユーザー確認待ち。
+
+## Android Share Intent (2026-09-15)
+
+ブラウザ/ECアプリの `ACTION_SEND` / `text/plain` をMainActivityで受け、MethodChannel `tokyo.andex.wadrob/share` からFlutterへ渡す経路を追加した。通常起動時のintentは無視し、共有文から最初のHTTP/HTTPS URLだけを抽出する。共有URLは一度だけ消費し、ログイン済みならURL取込を自動開始、未ログインなら認証完了まで保持する。
+
+- `./scripts/check.sh app`: format / analyze / Flutter 18 tests、all checks passed
+- 回帰テスト: 商品名と改行を含む共有文、URL末尾の日本語句読点、URLなし、二重消費防止、共有URLからの自動API取込
+- `flutter build apk --release`（本番API・Googleログイン設定）: pass、64,638,468 bytes
+- `check-release-apk.sh`: 必須native libraryあり、ONNX非混入、pass
+- APK Manifest: `android.intent.action.SEND`、`android.intent.category.DEFAULT`、`text/plain`、`tokyo.andex.wadrob.MainActivity` を確認
+- `/Users/yuki/Desktop/WDRB.apk` へ配置しビルド元とのSHA-256一致を確認: `0867dd74ed9965b6098840b3cbac4302fa81dabe062820c449a2b71488b1ad77`
+
+作業時にADB接続端末がなかったため、Androidの共有シートから起動する実機確認は未実施。

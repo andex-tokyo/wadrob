@@ -2841,12 +2841,12 @@ Semantics
 75. SHARE INTENT
 ==================================================
 
-MVP必須:
+対応済み:
 
 URL Paste
 
 
-将来的に:
+Androidでは:
 
 
 Browser / EC App
@@ -2864,12 +2864,10 @@ WADROB
 Import Preview
 
 
-へ拡張可能な構造。
+を実装する。共有テキストに商品名などが含まれる場合は最初のHTTP/HTTPS URLだけを使い、Import Previewを自動で開始する。
 
 
-Android Share Intentは
-本体完成を妨げない範囲なら
-MVPに追加してもよい。
+未ログイン時はURLを保持し、ログイン後にImport Previewへ進む。iOS Share Extensionは対象外。
 
 
 ==================================================

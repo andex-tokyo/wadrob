@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'core/api.dart';
 import 'core/cache.dart';
 import 'core/session.dart';
+import 'core/shared_url.dart';
+import 'features/item_editor/editor_screen.dart';
 import 'features/wardrobe/wardrobe_screen.dart';
 
 const appBackground = Color(0xfffafaf8);
@@ -18,21 +20,59 @@ Future<void> main() async {
     await WardrobeCache.open(),
     await SharedPreferences.getInstance(),
   );
+  final sharedUrls = SharedUrlReceiver();
+  await sharedUrls.initialize();
   runApp(
     ProviderScope(
       overrides: [sessionProvider.overrideWithValue(session)],
-      child: const WadrobApp(),
+      child: WadrobApp(sharedUrls: sharedUrls),
     ),
   );
   await session.restore();
 }
 
-class WadrobApp extends ConsumerWidget {
-  const WadrobApp({super.key});
+class WadrobApp extends ConsumerStatefulWidget {
+  const WadrobApp({super.key, required this.sharedUrls});
+  final SharedUrlReceiver sharedUrls;
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<WadrobApp> createState() => _WadrobAppState();
+}
+
+class _WadrobAppState extends ConsumerState<WadrobApp> {
+  final navigatorKey = GlobalKey<NavigatorState>();
+  bool openingSharedUrl = false;
+
+  void openSharedUrl(Session session) {
+    if (openingSharedUrl || session.initializing || session.user == null) {
+      return;
+    }
+    if (widget.sharedUrls.pendingUrl == null) return;
+    openingSharedUrl = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final url = widget.sharedUrls.take();
+      final navigator = navigatorKey.currentState;
+      if (url == null || navigator == null) {
+        openingSharedUrl = false;
+        return;
+      }
+      await navigator.push(
+        MaterialPageRoute<void>(
+          builder: (_) =>
+              EditorScreen(session: session, mode: 'url', initialUrl: url),
+        ),
+      );
+      openingSharedUrl = false;
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final session = ref.watch(sessionProvider);
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'WDRB',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -66,15 +106,18 @@ class WadrobApp extends ConsumerWidget {
         ),
       ),
       home: AnimatedBuilder(
-        animation: session,
-        builder: (context, _) => session.initializing
-            ? const Scaffold(body: Center(child: Text('W A D R O B')))
-            : session.user != null
-            ? WardrobeScreen(
-                key: ValueKey(session.user!['id']),
-                session: session,
-              )
-            : LoginScreen(session: session),
+        animation: Listenable.merge([session, widget.sharedUrls]),
+        builder: (context, _) {
+          openSharedUrl(session);
+          return session.initializing
+              ? const Scaffold(body: Center(child: Text('W A D R O B')))
+              : session.user != null
+              ? WardrobeScreen(
+                  key: ValueKey(session.user!['id']),
+                  session: session,
+                )
+              : LoginScreen(session: session);
+        },
       ),
     );
   }

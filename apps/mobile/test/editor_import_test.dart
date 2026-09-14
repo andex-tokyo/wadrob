@@ -4,12 +4,15 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wadrob/core/api.dart';
 import 'package:wadrob/core/cache.dart';
 import 'package:wadrob/core/session.dart';
+import 'package:wadrob/core/shared_url.dart';
 import 'package:wadrob/features/item_editor/editor_screen.dart';
+import 'package:wadrob/main.dart';
 
 class _StubAdapter implements HttpClientAdapter {
   _StubAdapter(this.responses);
@@ -64,6 +67,65 @@ Future<Session> sessionWith(HttpClientAdapter adapter) async => Session(
 );
 
 void main() {
+  testWidgets('ログイン済みなら共有受信からURL取込画面へ進む', (tester) async {
+    tester.view.physicalSize = const Size(1200, 3000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    SharedPreferences.setMockInitialValues({});
+    final adapter = _StubAdapter({
+      '/api/import/url': draftResponse({
+        'name': '共有したジャケット',
+        'sourceUrl': 'https://shop.example/shared-jacket',
+      }),
+    });
+    final session = await sessionWith(adapter)
+      ..initializing = false
+      ..user = {'id': 'user-1'};
+    final sharedUrls = SharedUrlReceiver()
+      ..receiveText('https://shop.example/shared-jacket');
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [sessionProvider.overrideWithValue(session)],
+        child: WadrobApp(sharedUrls: sharedUrls),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('URLから追加'), findsOneWidget);
+    expect(find.text('共有したジャケット'), findsOneWidget);
+    expect(sharedUrls.pendingUrl, isNull);
+  });
+
+  testWidgets('共有されたURLを表示直後に自動で取り込む', (tester) async {
+    tester.view.physicalSize = const Size(1200, 3000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    SharedPreferences.setMockInitialValues({});
+    final adapter = _StubAdapter({
+      '/api/import/url': draftResponse({
+        'name': '共有したシャツ',
+        'sourceUrl': 'https://shop.example/shared-shirt',
+      }),
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EditorScreen(
+          session: await sessionWith(adapter),
+          mode: 'url',
+          initialUrl: 'https://shop.example/shared-shirt',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(adapter.calls, contains('/api/import/url'));
+    expect(adapter.bodies.single['url'], 'https://shop.example/shared-shirt');
+    expect(find.text('共有したシャツ'), findsOneWidget);
+  });
+
   testWidgets('URL取込の解析結果をエディタへ反映する', (tester) async {
     tester.view.physicalSize = const Size(1200, 3000);
     tester.view.devicePixelRatio = 1;

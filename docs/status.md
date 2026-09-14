@@ -1,6 +1,6 @@
 # WADROB 実装ステータス
 
-最終更新: 2026-09-14
+最終更新: 2026-09-15
 
 **このファイルが進捗の唯一の台帳。** 作業を進めたら同じ変更の中でここも更新する。モデルや担当が変わっても、まずこのファイルを読めば現在地と次の作業が分かるように保つ。
 
@@ -19,9 +19,9 @@
 | Worker | `wadrob-api` 最新 version `750102b2-c78f-46c5-b559-6e3fe57281a6`（2026-09-14、商品外ページの誤登録防止） |
 | D1 / R2 | `wadrob-db` / `wadrob-images`（Browser Run `BROWSER`、Rate Limit `AI_RATE_LIMITER` あり） |
 | AI | `gpt-5.6-luna`（`OPENAI_API_KEY` 登録済み、`reasoning.effort: none`） |
-| 端末 | Pixel 6a エミュレータ（Android 36.1）、release APK インストール済み・Googleログイン済み |
+| 端末 | Pixel 6a エミュレータ（Android 36.1）で従来release・Googleログイン確認済み。2026-09-15のShare Intent版はADB未接続のため実機確認待ち |
 | 署名 | **アップロード鍵で署名**（`~/keystores/wadrob-upload.jks`、`apps/mobile/android/key.properties` はgit管理外）。`key.properties` が無い環境はdebug鍵にフォールバック（CI用） |
-| release APK | 2026-09-14 13:22 / 64.6MB（PageView・新アイコン、本番API・Googleログイン設定、アップロード鍵署名、静的検査pass）。デスクトップに `WDRB.apk` |
+| release APK | 2026-09-15 07:47 / 64.6MB（Android Share Intent、本番API・Googleログイン設定、アップロード鍵署名、静的検査pass）。デスクトップに `WDRB.apk` |
 | release AAB | 2026-09-14 08:07 / 62.9MB・ONNX削除後・アップロード鍵で署名済み |
 | Play Console | アプリ `WDRB` / `tokyo.andex.wadrob` を作成済み（未公開）。「Android デベロッパーの確認」で鍵の登録待ち |
 
@@ -79,6 +79,7 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 
 - ブランド: 表示名 WDRB。アイコン（アダプティブ含む）とスプラッシュは、クローゼット見出しと同じRoboto・字間、アプリ共通の暖色寄り背景 `#FAFAF8`、文字 `#252522` に統一。`tool/generate_brand_assets.py` で再生成できる
 - 登録の入口: URL取込に加えて、**商品名とブランドから商品候補を探す**（`POST /api/import/search`）。候補を選ぶと既存の取込経路で写真・価格・カテゴリを取り込む。写真・手動登録でも同じ導線を使える
+- Android共有: ブラウザやECアプリの「共有 → WDRB」から共有文のURLを抽出し、URL取込を自動開始する。停止中・起動中・ログイン待ちに対応
 - 画像の選択: URL取込で入った複数画像から**メインを選び、不要な画像を外せる**（保存時の順序が `sort_order` / `is_primary` になる）
 - 画像候補: JSON-LD/OGPが1枚しか持たないページでも、DOMと埋め込みデータから商品画像を最大40枚集めて候補にする。商品ID・型番・最頻ファイル名グループで関連商品を除外し、取込直後にモーダルで選択する（既定1枚）
 - カテゴリ: ニットをトップスへ統合。オールインワン・つなぎ・ジャンプスーツ・カバーオールもトップスとして扱い、細分類は保持する。本番D1の既存データも移行済み
@@ -96,7 +97,7 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 | 対象 | 現在 | 要件（§82）との差 |
 | --- | --- | --- |
 | Worker（Vitest） | 59 tests | OpenAIの再試行・quota非再試行・未完了・拒否・不正出力、ユーザー別rate limit、旧ニット値とつなぎ系のトップス補正、商品外ページ検出を追加。認可・所有権、CRUD、Archive、画像メタデータ、処理状態、Google検証、SSRFリダイレクト/DNS再検証のAPI通しテストは未 |
-| Flutter | 13 tests | 袖丈ショートカット、カテゴリの左右スワイプ、下部追加ボタンを追加。認証状態、キャッシュ先行表示、アカウント切替の分離、スクロール復元、ソート、Detail、写真、Archive、画像フォールバックが未 |
+| Flutter | 18 tests | 袖丈ショートカット、カテゴリの左右スワイプ、下部追加ボタン、共有受信からURL取込への遷移を追加。認証状態、キャッシュ先行表示、アカウント切替の分離、スクロール復元、ソート、Detail、写真、Archive、画像フォールバックが未 |
 | 端末スモーク（integration_test） | 2 tests | 4:5画像正規化と端末SQLite。debug / profile で実行、releaseは `check-release-apk.sh` でネイティブ依存を静的検査 |
 
 ## テスト体制
@@ -120,7 +121,7 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 3. ユーザー側の実機E2Eで手動登録、Logout→再ログイン、写真/カメラ登録、床・木目・カーペット写真の正規化品質を確認する
 4. **Google CloudのOAuthクライアントにアップロード鍵のSHA-1を追加**（Play配信用）→ Play Consoleの「Android デベロッパーの確認」でこの鍵を登録
 5. Wardrobe UIレビュー（トップス/シャツの袖丈ショートカットを含む。§87の品質ゲート／§88の観点）と記録
-6. 小粒: セットアップの `groupId` UI（§35）、Share Intent（§75）、ミラー未掲載ZOZO商品の扱い
+6. 小粒: セットアップの `groupId` UI（§35）、ミラー未掲載ZOZO商品の扱い
 
 ## 既知の制約
 
@@ -142,6 +143,7 @@ Workerのデプロイは `cd workers/api && npm run deploy`。端末で確認す
 
 ## 更新履歴（新しい順）
 
+- 2026-09-15: Android Share Intentを追加。ブラウザ/ECアプリの共有文からURLを抽出し、停止中・起動中・ログイン待ちのいずれでもURL取込を自動開始する。Flutter 18 tests。署名済みrelease APKを再生成しデスクトップへ配置
 - 2026-09-14: ONWARDのログイン転送、MUJIの商品なし表示、ABC-MARTの別商品差し替えを商品として採用しない品質検査を追加。入力URLからのBrowser Run再取得も追加し、本番Worker `750102b2-c78f-46c5-b559-6e3fe57281a6` へ反映。Worker 59 tests
 - 2026-09-14: 国内ファッションEC売上上位20をWorkerと同じ通常fetch・決定的パーサーで監査。13サイトで商品名・画像を取得し、403/不安定3サイト、商品外ページの誤解析3サイト、商品詳細未判定1サイトを特定
 - 2026-09-14: カテゴリ一覧をPageView化し、指へ追従する横移動と自然なスナップへ変更。アイコンはRobotoのペアカーニングを保ち、画面見出しと同じ字間・太さへ調整。アプリ・アイコン・スプラッシュ背景を `#FAFAF8` に統一。署名済みAPKを再生成してデスクトップへ配置
